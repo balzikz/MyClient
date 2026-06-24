@@ -2,12 +2,14 @@ package com.balzikz.mathclient;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -25,6 +27,7 @@ public final class MainActivity extends Activity {
     private static final int TEXT_SECONDARY = Color.rgb(145, 158, 150);
     private static final int ACCENT = Color.rgb(98, 216, 139);
     private static final int ACCENT_DARK = Color.rgb(13, 48, 27);
+    private static final int WARNING = Color.rgb(238, 181, 91);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,6 +35,8 @@ public final class MainActivity extends Activity {
 
         getWindow().setStatusBarColor(BACKGROUND);
         getWindow().setNavigationBarColor(BACKGROUND);
+
+        MinecraftInstall minecraft = readMinecraftInstall();
 
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
@@ -62,15 +67,15 @@ public final class MainActivity extends Activity {
         LinearLayout hero = panel();
         content.addView(hero, marginTop(28));
 
-        TextView version = text("0.1.0-alpha", 12, ACCENT, Typeface.BOLD);
+        TextView version = text("0.2.0-alpha", 12, ACCENT, Typeface.BOLD);
         version.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         hero.addView(version);
 
-        TextView heroTitle = text("Первый запуск", 25, TEXT_PRIMARY, Typeface.BOLD);
+        TextView heroTitle = text("Bedrock Link", 25, TEXT_PRIMARY, Typeface.BOLD);
         hero.addView(heroTitle, marginTop(10));
 
         TextView heroBody = text(
-                "Минимальный прототип клиента. Сейчас он умеет запускать установленный Minecraft Bedrock. Дальше здесь появятся профили, паки и настройки.",
+                "MATH Client теперь определяет установленный Minecraft Bedrock, читает номер его версии и запускает оригинальное приложение.",
                 15,
                 TEXT_SECONDARY,
                 Typeface.NORMAL
@@ -78,9 +83,46 @@ public final class MainActivity extends Activity {
         heroBody.setLineSpacing(0f, 1.25f);
         hero.addView(heroBody, marginTop(10));
 
-        Button launchButton = primaryButton("ЗАПУСТИТЬ MINECRAFT");
+        Button launchButton = primaryButton(
+                minecraft.installed ? "ЗАПУСТИТЬ MINECRAFT" : "MINECRAFT НЕ НАЙДЕН"
+        );
         launchButton.setOnClickListener(view -> launchMinecraft());
         content.addView(launchButton, marginTop(22));
+
+        TextView connectionLabel = text("ПОДКЛЮЧЕНИЕ", 12, TEXT_SECONDARY, Typeface.BOLD);
+        connectionLabel.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        connectionLabel.setLetterSpacing(0.18f);
+        content.addView(connectionLabel, marginTop(34));
+
+        LinearLayout connectionPanel = panel();
+        content.addView(connectionPanel, marginTop(12));
+
+        int connectionColor = minecraft.installed ? ACCENT : WARNING;
+        String connectionTitle = minecraft.installed
+                ? "●  MINECRAFT CONNECTED"
+                : "○  MINECRAFT NOT FOUND";
+
+        TextView statusTitle = text(connectionTitle, 13, connectionColor, Typeface.BOLD);
+        statusTitle.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        connectionPanel.addView(statusTitle);
+
+        TextView statusText = text(
+                minecraft.statusText(),
+                14,
+                TEXT_SECONDARY,
+                Typeface.NORMAL
+        );
+        statusText.setLineSpacing(0f, 1.25f);
+        connectionPanel.addView(statusText, marginTop(10));
+
+        TextView compatibilityText = text(
+                "Режим совместимости: STABLE / точная версия пока не закреплена",
+                12,
+                TEXT_SECONDARY,
+                Typeface.NORMAL
+        );
+        compatibilityText.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL);
+        connectionPanel.addView(compatibilityText, marginTop(12));
 
         TextView modulesLabel = text("МОДУЛИ", 12, TEXT_SECONDARY, Typeface.BOLD);
         modulesLabel.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
@@ -95,20 +137,20 @@ public final class MainActivity extends Activity {
         packsButton.setOnClickListener(view -> notReady("Ресурс-паки"));
         content.addView(packsButton, marginTop(10));
 
-        LinearLayout statusPanel = panel();
-        content.addView(statusPanel, marginTop(28));
+        LinearLayout systemPanel = panel();
+        content.addView(systemPanel, marginTop(28));
 
-        TextView statusTitle = text("●  SYSTEM READY", 13, ACCENT, Typeface.BOLD);
-        statusTitle.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        statusPanel.addView(statusTitle);
+        TextView systemTitle = text("●  SYSTEM READY", 13, ACCENT, Typeface.BOLD);
+        systemTitle.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        systemPanel.addView(systemTitle);
 
-        TextView statusText = text(
+        TextView systemText = text(
                 "Нативное Android-приложение • без внедрения в память игры",
                 13,
                 TEXT_SECONDARY,
                 Typeface.NORMAL
         );
-        statusPanel.addView(statusText, marginTop(8));
+        systemPanel.addView(systemText, marginTop(8));
 
         TextView footer = text("MATH Client  /  built by balzikz", 11, TEXT_SECONDARY, Typeface.NORMAL);
         footer.setGravity(Gravity.CENTER);
@@ -118,13 +160,43 @@ public final class MainActivity extends Activity {
         setContentView(scrollView);
     }
 
+    private MinecraftInstall readMinecraftInstall() {
+        try {
+            PackageInfo packageInfo;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageInfo = getPackageManager().getPackageInfo(
+                        MINECRAFT_PACKAGE,
+                        PackageManager.PackageInfoFlags.of(0)
+                );
+            } else {
+                packageInfo = getPackageManager().getPackageInfo(MINECRAFT_PACKAGE, 0);
+            }
+
+            String versionName = packageInfo.versionName == null
+                    ? "не указана"
+                    : packageInfo.versionName;
+
+            long versionCode;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                versionCode = packageInfo.getLongVersionCode();
+            } else {
+                versionCode = packageInfo.versionCode;
+            }
+
+            return new MinecraftInstall(true, versionName, versionCode);
+        } catch (PackageManager.NameNotFoundException exception) {
+            return new MinecraftInstall(false, "—", 0);
+        }
+    }
+
     private void launchMinecraft() {
         Intent launchIntent = getPackageManager().getLaunchIntentForPackage(MINECRAFT_PACKAGE);
 
         if (launchIntent == null) {
             Toast.makeText(
                     this,
-                    "Minecraft Bedrock не найден на устройстве.",
+                    "Minecraft Bedrock не найден. Установи официальное приложение и перезапусти MATH Client.",
                     Toast.LENGTH_LONG
             ).show();
             return;
@@ -212,5 +284,27 @@ public final class MainActivity extends Activity {
 
     private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private static final class MinecraftInstall {
+        private final boolean installed;
+        private final String versionName;
+        private final long versionCode;
+
+        private MinecraftInstall(boolean installed, String versionName, long versionCode) {
+            this.installed = installed;
+            this.versionName = versionName;
+            this.versionCode = versionCode;
+        }
+
+        private String statusText() {
+            if (!installed) {
+                return "Minecraft Bedrock не установлен. После установки MATH Client обнаружит его автоматически.";
+            }
+
+            return "Minecraft Bedrock обнаружен\n"
+                    + "Версия: " + versionName + "\n"
+                    + "Код сборки: " + versionCode;
+        }
     }
 }
