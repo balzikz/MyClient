@@ -17,8 +17,8 @@ public final class BootstrapActivity extends Activity {
 
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
 
-        Intent mainIntent = new Intent(this, MainActivity.class);
-        startActivity(mainIntent);
+        Intent diagnosticsIntent = new Intent(this, DiagnosticsActivity.class);
+        startActivity(diagnosticsIntent);
         finish();
     }
 }
