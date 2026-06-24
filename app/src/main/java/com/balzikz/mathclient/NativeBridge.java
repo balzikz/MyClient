@@ -44,7 +44,24 @@ public final class NativeBridge {
         }
     }
 
+    public static String getLoadedModules() {
+        if (!LOADED) {
+            return "ModuleScanner unavailable: native core failed to load.";
+        }
+
+        try {
+            return nativeGetLoadedModules();
+        } catch (Throwable throwable) {
+            return "ModuleScanner JNI error: "
+                    + throwable.getClass().getSimpleName()
+                    + ": "
+                    + throwable.getMessage();
+        }
+    }
+
     private static native void nativeInitialize();
 
     private static native String nativeGetCoreInfo();
+
+    private static native String nativeGetLoadedModules();
 }
