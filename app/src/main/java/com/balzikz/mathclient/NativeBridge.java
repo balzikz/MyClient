@@ -99,6 +99,26 @@ public final class NativeBridge {
         return LOADED ? nativeRenderStateLabStatus() : "Native core unavailable";
     }
 
+    public static void fastGuardLabCreate() {
+        if (LOADED) nativeFastGuardLabCreate();
+    }
+
+    public static void fastGuardLabResize(int width, int height) {
+        if (LOADED) nativeFastGuardLabResize(width, height);
+    }
+
+    public static void fastGuardLabRender() {
+        if (LOADED) nativeFastGuardLabRender();
+    }
+
+    public static void fastGuardLabTouch(float x, float y, boolean pressed) {
+        if (LOADED) nativeFastGuardLabTouch(x, y, pressed);
+    }
+
+    public static String fastGuardLabStatus() {
+        return LOADED ? nativeFastGuardLabStatus() : "Native core unavailable";
+    }
+
     private static native void nativeInitialize();
 
     private static native String nativeGetCoreInfo();
@@ -124,4 +144,14 @@ public final class NativeBridge {
     private static native void nativeRenderStateLabTouch(float x, float y, boolean pressed);
 
     private static native String nativeRenderStateLabStatus();
+
+    private static native void nativeFastGuardLabCreate();
+
+    private static native void nativeFastGuardLabResize(int width, int height);
+
+    private static native void nativeFastGuardLabRender();
+
+    private static native void nativeFastGuardLabTouch(float x, float y, boolean pressed);
+
+    private static native String nativeFastGuardLabStatus();
 }
