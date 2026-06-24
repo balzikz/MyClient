@@ -59,9 +59,39 @@ public final class NativeBridge {
         }
     }
 
+    public static void eglLabCreate() {
+        if (LOADED) nativeEglLabCreate();
+    }
+
+    public static void eglLabResize(int width, int height) {
+        if (LOADED) nativeEglLabResize(width, height);
+    }
+
+    public static void eglLabRender() {
+        if (LOADED) nativeEglLabRender();
+    }
+
+    public static void eglLabTouch(float x, float y, boolean pressed) {
+        if (LOADED) nativeEglLabTouch(x, y, pressed);
+    }
+
+    public static String eglLabStatus() {
+        return LOADED ? nativeEglLabStatus() : "Native core unavailable";
+    }
+
     private static native void nativeInitialize();
 
     private static native String nativeGetCoreInfo();
 
     private static native String nativeGetLoadedModules();
+
+    private static native void nativeEglLabCreate();
+
+    private static native void nativeEglLabResize(int width, int height);
+
+    private static native void nativeEglLabRender();
+
+    private static native void nativeEglLabTouch(float x, float y, boolean pressed);
+
+    private static native String nativeEglLabStatus();
 }
