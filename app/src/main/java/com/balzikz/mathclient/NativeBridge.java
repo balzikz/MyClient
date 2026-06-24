@@ -79,24 +79,24 @@ public final class NativeBridge {
         return LOADED ? nativeEglLabStatus() : "Native core unavailable";
     }
 
-    public static void hookLabCreate() {
-        if (LOADED) nativeHookLabCreate();
+    public static void renderStateLabCreate() {
+        if (LOADED) nativeRenderStateLabCreate();
     }
 
-    public static void hookLabResize(int width, int height) {
-        if (LOADED) nativeHookLabResize(width, height);
+    public static void renderStateLabResize(int width, int height) {
+        if (LOADED) nativeRenderStateLabResize(width, height);
     }
 
-    public static void hookLabRender() {
-        if (LOADED) nativeHookLabRender();
+    public static void renderStateLabRender() {
+        if (LOADED) nativeRenderStateLabRender();
     }
 
-    public static void hookLabTouch(float x, float y, boolean pressed) {
-        if (LOADED) nativeHookLabTouch(x, y, pressed);
+    public static void renderStateLabTouch(float x, float y, boolean pressed) {
+        if (LOADED) nativeRenderStateLabTouch(x, y, pressed);
     }
 
-    public static String hookLabStatus() {
-        return LOADED ? nativeHookLabStatus() : "Native core unavailable";
+    public static String renderStateLabStatus() {
+        return LOADED ? nativeRenderStateLabStatus() : "Native core unavailable";
     }
 
     private static native void nativeInitialize();
@@ -115,13 +115,13 @@ public final class NativeBridge {
 
     private static native String nativeEglLabStatus();
 
-    private static native void nativeHookLabCreate();
+    private static native void nativeRenderStateLabCreate();
 
-    private static native void nativeHookLabResize(int width, int height);
+    private static native void nativeRenderStateLabResize(int width, int height);
 
-    private static native void nativeHookLabRender();
+    private static native void nativeRenderStateLabRender();
 
-    private static native void nativeHookLabTouch(float x, float y, boolean pressed);
+    private static native void nativeRenderStateLabTouch(float x, float y, boolean pressed);
 
-    private static native String nativeHookLabStatus();
+    private static native String nativeRenderStateLabStatus();
 }
