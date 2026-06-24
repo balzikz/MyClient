@@ -1,9 +1,11 @@
 package com.balzikz.mathclient;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -45,8 +47,15 @@ public final class RenderStateLabActivity extends Activity {
                 11,
                 Color.LTGRAY,
                 false);
-        explanation.setPadding(0, dp(10), 0, 0);
+        explanation.setPadding(0, dp(10), 0, dp(8));
         root.addView(explanation);
+
+        Button fastLab = new Button(this);
+        fastLab.setText("ОТКРЫТЬ FAST GUARD LAB");
+        fastLab.setAllCaps(false);
+        fastLab.setOnClickListener(view ->
+                startActivity(new Intent(this, FastGuardLabActivity.class)));
+        root.addView(fastLab);
 
         setContentView(root);
     }
