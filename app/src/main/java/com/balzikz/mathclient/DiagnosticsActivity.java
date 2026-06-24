@@ -24,6 +24,7 @@ public final class DiagnosticsActivity extends Activity {
     private String reportPrefix;
     private String fullModules;
     private String elfReport = "Analyzing libminecraftpe.so...";
+    private String profileReport = "Waiting for ELF fingerprint...";
     private boolean expanded;
     private boolean elfReady;
 
@@ -40,7 +41,7 @@ public final class DiagnosticsActivity extends Activity {
         scroll.addView(root);
 
         root.addView(block(
-                "MATH DIAGNOSTICS\nStage 2.9 / ELF Inspector",
+                "MATH DIAGNOSTICS\nStage 2.99 / Profile + EGL Lab",
                 22,
                 Color.WHITE));
 
@@ -69,6 +70,12 @@ public final class DiagnosticsActivity extends Activity {
         copyButton.setOnClickListener(view -> copyFullReport());
         root.addView(copyButton);
 
+        Button lab = new Button(this);
+        lab.setText("ОТКРЫТЬ EGL LAB");
+        lab.setOnClickListener(view ->
+                startActivity(new Intent(this, EglLabActivity.class)));
+        root.addView(lab);
+
         Button next = new Button(this);
         next.setText("ОТКРЫТЬ MATH CLIENT");
         next.setOnClickListener(view -> {
@@ -85,13 +92,15 @@ public final class DiagnosticsActivity extends Activity {
         Context appContext = getApplicationContext();
         new Thread(() -> {
             String result = ElfInspector.create(appContext);
+            String profile = ProfileVerifier.verify(appContext, result);
             runOnUiThread(() -> {
                 elfReport = result;
+                profileReport = profile;
                 elfReady = true;
                 body.setText(buildVisibleReport());
                 copyButton.setEnabled(true);
                 copyButton.setText("СКОПИРОВАТЬ ПОЛНЫЙ ОТЧЁТ");
-                Toast.makeText(this, "ELF-анализ завершён.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "ELF-анализ и профиль готовы.", Toast.LENGTH_SHORT).show();
             });
         }, "MATH-ELF-Inspector").start();
     }
@@ -108,6 +117,8 @@ public final class DiagnosticsActivity extends Activity {
         return reportPrefix
                 + "\n\n=== ELF INSPECTOR / libminecraftpe.so ===\n"
                 + elfReport
+                + "\n\n=== BEDROCK PROFILE ===\n"
+                + profileReport
                 + "\n\n=== CURRENT PROCESS MODULES ===\n"
                 + (expanded ? fullModules : modulePreview(fullModules));
     }
@@ -145,6 +156,8 @@ public final class DiagnosticsActivity extends Activity {
         String fullReport = reportPrefix
                 + "\n\n=== ELF INSPECTOR / libminecraftpe.so ===\n"
                 + elfReport
+                + "\n\n=== BEDROCK PROFILE ===\n"
+                + profileReport
                 + "\n\n=== CURRENT PROCESS MODULES ===\n"
                 + fullModules;
         clipboard.setPrimaryClip(ClipData.newPlainText(
