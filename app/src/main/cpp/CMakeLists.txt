@@ -8,6 +8,7 @@ add_library(
         math_core.cpp
         egl_lab.cpp
         render_state_lab.cpp
+        fast_guard_lab.cpp
 )
 
 target_compile_features(mathclient PRIVATE cxx_std_20)
