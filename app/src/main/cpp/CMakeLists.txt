@@ -19,9 +19,11 @@ target_compile_options(
 )
 
 find_library(android-log-lib log)
+find_library(android-dl-lib dl)
 
 target_link_libraries(
         mathclient
         PRIVATE
         ${android-log-lib}
+        ${android-dl-lib}
 )
