@@ -25,20 +25,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android SDK, NDK and CMake
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.4.1'
 
-      - name: Build debug APK
+      - name: Build debug APK with native core
         run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify native library was packaged
+        run: unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathclient.so"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: math-client-debug
+          name: math-client-native-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
