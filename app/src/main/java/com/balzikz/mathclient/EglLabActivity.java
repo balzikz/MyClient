@@ -1,9 +1,11 @@
 package com.balzikz.mathclient;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -48,8 +50,15 @@ public final class EglLabActivity extends Activity {
                 12,
                 Color.LTGRAY,
                 false);
-        hint.setPadding(0, dp(12), 0, 0);
+        hint.setPadding(0, dp(12), 0, dp(8));
         root.addView(hint);
+
+        Button stateLab = new Button(this);
+        stateLab.setText("ОТКРЫТЬ RENDER STATE LAB");
+        stateLab.setAllCaps(false);
+        stateLab.setOnClickListener(view ->
+                startActivity(new Intent(this, RenderStateLabActivity.class)));
+        root.addView(stateLab);
 
         setContentView(root);
     }
