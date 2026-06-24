@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
         LinearLayout hero = panel();
         content.addView(hero, marginTop(28));
 
-        TextView version = text("0.2.0-alpha", 12, ACCENT, Typeface.BOLD);
+        TextView version = text("0.2.1-alpha", 12, ACCENT, Typeface.BOLD);
         version.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         hero.addView(version);
 
@@ -75,7 +75,7 @@ public final class MainActivity extends Activity {
         hero.addView(heroTitle, marginTop(10));
 
         TextView heroBody = text(
-                "MATH Client теперь определяет установленный Minecraft Bedrock, читает номер его версии и запускает оригинальное приложение.",
+                "MATH Client определяет установленный Minecraft Bedrock, читает номер его версии и запускает оригинальное приложение в экспериментальном общем стеке.",
                 15,
                 TEXT_SECONDARY,
                 Typeface.NORMAL
@@ -116,12 +116,13 @@ public final class MainActivity extends Activity {
         connectionPanel.addView(statusText, marginTop(10));
 
         TextView compatibilityText = text(
-                "Режим совместимости: STABLE / точная версия пока не закреплена",
+                "Совместимость: STABLE\nЗапуск: SAME TASK / EXPERIMENTAL",
                 12,
                 TEXT_SECONDARY,
                 Typeface.NORMAL
         );
         compatibilityText.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL);
+        compatibilityText.setLineSpacing(0f, 1.25f);
         connectionPanel.addView(compatibilityText, marginTop(12));
 
         TextView modulesLabel = text("МОДУЛИ", 12, TEXT_SECONDARY, Typeface.BOLD);
@@ -145,7 +146,7 @@ public final class MainActivity extends Activity {
         systemPanel.addView(systemTitle);
 
         TextView systemText = text(
-                "Нативное Android-приложение • без внедрения в память игры",
+                "Bedrock запускается поверх MATH Client без FLAG_ACTIVITY_NEW_TASK",
                 13,
                 TEXT_SECONDARY,
                 Typeface.NORMAL
@@ -202,7 +203,10 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // PackageManager usually returns a launcher intent with NEW_TASK already set.
+        // Clearing all launch flags asks Android to place Minecraft above this Activity
+        // in the current task. Minecraft or the device firmware can still override it.
+        launchIntent.setFlags(0);
         startActivity(launchIntent);
     }
 
