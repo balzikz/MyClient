@@ -7,6 +7,7 @@ add_library(
         SHARED
         math_core.cpp
         egl_lab.cpp
+        render_state_lab.cpp
 )
 
 target_compile_features(mathclient PRIVATE cxx_std_20)
