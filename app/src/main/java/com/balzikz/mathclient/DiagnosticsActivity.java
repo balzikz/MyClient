@@ -20,9 +20,12 @@ public final class DiagnosticsActivity extends Activity {
 
     private TextView body;
     private Button expandButton;
-    private String baseReport;
+    private Button copyButton;
+    private String reportPrefix;
     private String fullModules;
+    private String elfReport = "Analyzing libminecraftpe.so...";
     private boolean expanded;
+    private boolean elfReady;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -37,20 +40,19 @@ public final class DiagnosticsActivity extends Activity {
         scroll.addView(root);
 
         root.addView(block(
-                "MATH DIAGNOSTICS\nStage 2.5 / APK native inventory",
+                "MATH DIAGNOSTICS\nStage 2.9 / ELF Inspector",
                 22,
                 Color.WHITE));
 
         fullModules = NativeBridge.getLoadedModules();
-        baseReport = "\n=== NATIVE CORE ===\n"
+        reportPrefix = "\n=== NATIVE CORE ===\n"
                 + NativeBridge.getStatusText()
                 + "\n\n=== BEDROCK PACKAGE ===\n"
                 + PackageReport.create(this)
                 + "\n\n=== DEVICE / GRAPHICS ===\n"
                 + GraphicsReport.create(this)
                 + "\n\n=== APK NATIVE INVENTORY ===\n"
-                + ApkNativeInventory.create(this)
-                + "\n\n=== CURRENT PROCESS MODULES ===\n";
+                + ApkNativeInventory.create(this);
 
         body = block(buildVisibleReport(), 12, Color.LTGRAY);
         body.setTextIsSelectable(true);
@@ -61,10 +63,11 @@ public final class DiagnosticsActivity extends Activity {
         expandButton.setOnClickListener(view -> toggleModules());
         root.addView(expandButton);
 
-        Button copy = new Button(this);
-        copy.setText("СКОПИРОВАТЬ ПОЛНЫЙ ОТЧЁТ");
-        copy.setOnClickListener(view -> copyFullReport());
-        root.addView(copy);
+        copyButton = new Button(this);
+        copyButton.setText("ELF-АНАЛИЗ ВЫПОЛНЯЕТСЯ...");
+        copyButton.setEnabled(false);
+        copyButton.setOnClickListener(view -> copyFullReport());
+        root.addView(copyButton);
 
         Button next = new Button(this);
         next.setText("ОТКРЫТЬ MATH CLIENT");
@@ -75,6 +78,22 @@ public final class DiagnosticsActivity extends Activity {
         root.addView(next);
 
         setContentView(scroll);
+        startElfInspection();
+    }
+
+    private void startElfInspection() {
+        Context appContext = getApplicationContext();
+        new Thread(() -> {
+            String result = ElfInspector.create(appContext);
+            runOnUiThread(() -> {
+                elfReport = result;
+                elfReady = true;
+                body.setText(buildVisibleReport());
+                copyButton.setEnabled(true);
+                copyButton.setText("СКОПИРОВАТЬ ПОЛНЫЙ ОТЧЁТ");
+                Toast.makeText(this, "ELF-анализ завершён.", Toast.LENGTH_SHORT).show();
+            });
+        }, "MATH-ELF-Inspector").start();
     }
 
     private void toggleModules() {
@@ -86,7 +105,11 @@ public final class DiagnosticsActivity extends Activity {
     }
 
     private String buildVisibleReport() {
-        return baseReport + (expanded ? fullModules : modulePreview(fullModules));
+        return reportPrefix
+                + "\n\n=== ELF INSPECTOR / libminecraftpe.so ===\n"
+                + elfReport
+                + "\n\n=== CURRENT PROCESS MODULES ===\n"
+                + (expanded ? fullModules : modulePreview(fullModules));
     }
 
     private String modulePreview(String value) {
@@ -97,9 +120,7 @@ public final class DiagnosticsActivity extends Activity {
 
         StringBuilder preview = new StringBuilder();
         for (int index = 0; index < PREVIEW_MODULE_LINES; index++) {
-            if (index > 0) {
-                preview.append('\n');
-            }
+            if (index > 0) preview.append('\n');
             preview.append(lines[index]);
         }
         preview.append("\n... ")
@@ -109,6 +130,11 @@ public final class DiagnosticsActivity extends Activity {
     }
 
     private void copyFullReport() {
+        if (!elfReady) {
+            Toast.makeText(this, "ELF-анализ ещё выполняется.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         ClipboardManager clipboard =
                 (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) {
@@ -116,9 +142,14 @@ public final class DiagnosticsActivity extends Activity {
             return;
         }
 
+        String fullReport = reportPrefix
+                + "\n\n=== ELF INSPECTOR / libminecraftpe.so ===\n"
+                + elfReport
+                + "\n\n=== CURRENT PROCESS MODULES ===\n"
+                + fullModules;
         clipboard.setPrimaryClip(ClipData.newPlainText(
                 "MATH Client diagnostics",
-                baseReport + fullModules));
+                fullReport));
         Toast.makeText(this, "Полный отчёт скопирован.", Toast.LENGTH_SHORT).show();
     }
 
