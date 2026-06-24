@@ -11,7 +11,7 @@
 namespace {
 
 constexpr char kLogTag[] = "MATH-NATIVE";
-constexpr char kCoreVersion[] = "0.4.0-alpha";
+constexpr char kCoreVersion[] = "0.5.1-alpha";
 
 const char* detectAbi() {
 #if defined(__aarch64__)
@@ -64,18 +64,14 @@ std::string scanLoadedModules() {
 
     std::ostringstream report;
     report << "Current process modules: " << modules.size() << "\n";
-
-    constexpr std::size_t kDisplayLimit = 60;
-    const std::size_t displayed = std::min(modules.size(), kDisplayLimit);
-    for (std::size_t index = 0; index < displayed; ++index) {
-        report << index + 1 << ". " << modules[index] << "\n";
+    for (std::size_t index = 0; index < modules.size(); ++index) {
+        report << index + 1 << ". " << modules[index];
+        if (index + 1 < modules.size()) {
+            report << "\n";
+        }
     }
 
-    if (modules.size() > kDisplayLimit) {
-        report << "... " << modules.size() - kDisplayLimit << " more modules";
-    }
-
-    logInfo("ModuleScanner found " + std::to_string(modules.size()) + " loaded objects");
+    logInfo("ModuleScanner returned all " + std::to_string(modules.size()) + " loaded objects");
     return report.str();
 }
 
