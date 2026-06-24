@@ -23,7 +23,7 @@ public final class DiagnosticsActivity extends Activity {
         root.setPadding(32, 32, 32, 32);
         scroll.addView(root);
 
-        TextView title = block("MATH DIAGNOSTICS\nStage 2 / environment fingerprint", 22, Color.WHITE);
+        TextView title = block("MATH DIAGNOSTICS\nStage 2.5 / APK native inventory", 22, Color.WHITE);
         root.addView(title);
 
         String report = "\n=== NATIVE CORE ===\n"
@@ -32,6 +32,8 @@ public final class DiagnosticsActivity extends Activity {
                 + PackageReport.create(this)
                 + "\n\n=== DEVICE / GRAPHICS ===\n"
                 + GraphicsReport.create(this)
+                + "\n\n=== APK NATIVE INVENTORY ===\n"
+                + ApkNativeInventory.create(this)
                 + "\n\n=== CURRENT PROCESS MODULES ===\n"
                 + NativeBridge.getLoadedModules();
 
