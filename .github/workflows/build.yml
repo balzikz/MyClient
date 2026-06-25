@@ -50,6 +50,14 @@ jobs:
           fi
           echo "Stage 4 Gradle build completed successfully."
 
+      - name: Upload Stage 4 build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-build-log
+          path: stage4-build.log
+          if-no-files-found: error
+
       - name: Verify native libraries and signature
         run: |
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathclient.so"
