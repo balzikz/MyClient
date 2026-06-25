@@ -1,9 +1,14 @@
 package com.mojang.minecraftpe;
 
+import android.os.Environment;
 import android.view.KeyEvent;
 import android.view.View;
 
+import com.balzikz.mathclient.HostJournal;
 import com.google.androidgamesdk.GameActivity;
+
+import java.io.File;
+import java.io.FileOutputStream;
 
 public class MainActivity extends GameActivity
         implements FilePickerManagerHandler, View.OnKeyListener {
@@ -43,6 +48,48 @@ public class MainActivity extends GameActivity
     public native boolean isEduMode();
     public native boolean isPublishBuild();
     public static native void nativeWaitCrashManagementSetupComplete();
+
+    /**
+     * Mirrors Minecraft 1.26.23.1 MainActivity.getExternalStoragePath().
+     * This is the app-specific external files directory, not shared storage root.
+     */
+    public String getExternalStoragePath() {
+        File directory = getExternalFilesDir(null);
+        String path = directory == null ? "" : directory.getAbsolutePath();
+        HostJournal.write(this, "JAVA_GET_EXTERNAL_STORAGE_PATH", path);
+        return path;
+    }
+
+    /** Mirrors Minecraft 1.26.23.1 MainActivity.getInternalStoragePath(). */
+    public String getInternalStoragePath() {
+        String path = getDataDir().getAbsolutePath();
+        HostJournal.write(this, "JAVA_GET_INTERNAL_STORAGE_PATH", path);
+        return path;
+    }
+
+    /**
+     * Mirrors Minecraft 1.26.23.1 legacy-storage probe. On modern scoped-storage
+     * devices this normally returns an empty string because the shared root is not writable.
+     */
+    public String getLegacyExternalStoragePath(String gameFolder) {
+        String path = "";
+        String resultDetail;
+        try {
+            File root = Environment.getExternalStorageDirectory();
+            File gameDirectory = new File(root, gameFolder);
+            File probe = new File(gameDirectory, "test");
+            try (FileOutputStream output = new FileOutputStream(probe)) {
+                output.flush();
+            }
+            path = root.getAbsolutePath();
+            resultDetail = "gameFolder=" + gameFolder + " result=" + path;
+        } catch (Throwable error) {
+            resultDetail = "gameFolder=" + gameFolder + " result= reason="
+                    + error.getClass().getName() + ": " + error.getMessage();
+        }
+        HostJournal.write(this, "JAVA_GET_LEGACY_EXTERNAL_STORAGE_PATH", resultDetail);
+        return path;
+    }
 
     @Override
     public boolean onKey(View view, int keyCode, KeyEvent event) {
