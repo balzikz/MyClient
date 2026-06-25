@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -21,12 +22,14 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public final class MinecraftGameHostLabActivity extends Activity {
-    private static final int CREATE_TOMBSTONE_FILE = 397;
-    private static final int CREATE_DIAGNOSTICS_FILE = 1397;
+    private static final int CREATE_TOMBSTONE_FILE = 398;
+    private static final int CREATE_DIAGNOSTICS_FILE = 1398;
     private static final long MAX_TOMBSTONE_BYTES = 32L * 1024L * 1024L;
-    private static final String STAGE = "3.9.7";
+    private static final int MAX_LOGCAT_BYTES = 256 * 1024;
+    private static final String STAGE = "3.9.8";
     private static final String[] LIBS = {
             "libc++_shared.so", "libfmod.so", "libHttpClient.Android.so", "libmaesdk.so",
             "libPlayFabMultiplayer.so", "libMediaDecoders_Android.so", "libconscrypt_jni.so",
@@ -38,6 +41,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
     private Button exportTombstone;
     private File cachedTombstone;
     private long tombstoneTimestamp;
+    private int lastExitPid = -1;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -63,7 +67,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
         });
         root.addView(launch);
 
-        Button refresh = button("ОБНОВИТЬ TIMELINE И SIGNAL TRACE");
+        Button refresh = button("ОБНОВИТЬ TIMELINE, TRACE И LOGCAT");
         refresh.setOnClickListener(view -> refresh());
         root.addView(refresh);
 
@@ -131,7 +135,9 @@ public final class MinecraftGameHostLabActivity extends Activity {
         }
         text.append("\n=== HOST TIMELINE TAIL ===\n").append(HostJournal.read(this));
         text.append("\n=== NATIVE SIGNAL TRACE TAIL ===\n").append(HostJournal.readSignalTrace(this));
-        text.append("\n=== LAST PROCESS EXIT ===\n").append(latestExitInfoAndCaptureTrace());
+        String exitReport = latestExitInfoAndCaptureTrace();
+        text.append("\n=== LAST PROCESS EXIT ===\n").append(exitReport);
+        text.append("\n=== LAST PROCESS LOGCAT ===\n").append(captureLogcat(lastExitPid));
         text.append("\nPreflight: ").append(ready ? "READY" : "BLOCKED");
         launch.setEnabled(ready);
         exportTombstone.setEnabled(cachedTombstone != null
@@ -143,6 +149,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
     private String latestExitInfoAndCaptureTrace() {
         cachedTombstone = null;
         tombstoneTimestamp = 0L;
+        lastExitPid = -1;
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             return "ApplicationExitInfo requires Android 11+.";
         }
@@ -150,12 +157,14 @@ public final class MinecraftGameHostLabActivity extends Activity {
         if (manager == null) return "ActivityManager unavailable.";
         try {
             List<ApplicationExitInfo> exits = manager.getHistoricalProcessExitReasons(
-                    getPackageName(), 0, 16);
+                    getPackageName(), 0, 24);
             for (ApplicationExitInfo exit : exits) {
                 String process = exit.getProcessName();
                 if (process != null && process.endsWith(":game_host")) {
+                    lastExitPid = exit.getPid();
                     String description = exit.getDescription();
                     return "process=" + process
+                            + "\npid=" + lastExitPid
                             + "\nreason=" + reasonName(exit.getReason()) + " (" + exit.getReason() + ")"
                             + "\nstatus=" + exit.getStatus()
                             + "\nimportance=" + exit.getImportance()
@@ -172,14 +181,14 @@ public final class MinecraftGameHostLabActivity extends Activity {
 
     private String captureTrace(ApplicationExitInfo exit) {
         if (exit.getReason() != ApplicationExitInfo.REASON_CRASH_NATIVE) {
-            return "tombstone=NOT A NATIVE CRASH; use NATIVE SIGNAL TRACE above";
+            return "tombstone=NOT A NATIVE CRASH; use NATIVE SIGNAL TRACE and LOGCAT";
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             return "tombstone=Native traces require Android 12+.";
         }
         try (InputStream input = exit.getTraceInputStream()) {
             if (input == null) return "tombstone=UNAVAILABLE OR OVERWRITTEN";
-            File target = new File(getCacheDir(), "stage-3.9.7-native-tombstone.pb");
+            File target = new File(getCacheDir(), "stage-3.9.8-native-tombstone.pb");
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             long count;
             try (FileOutputStream output = new FileOutputStream(target, false)) {
@@ -203,12 +212,58 @@ public final class MinecraftGameHostLabActivity extends Activity {
         }
     }
 
+    private String captureLogcat(int pid) {
+        if (pid <= 0) return "No exited process PID available.";
+        Process process = null;
+        try {
+            process = new ProcessBuilder(
+                    "/system/bin/logcat",
+                    "-d",
+                    "-v", "threadtime",
+                    "-b", "all",
+                    "-t", "800",
+                    "--pid=" + pid)
+                    .redirectErrorStream(true)
+                    .start();
+            String output = readLimited(process.getInputStream(), MAX_LOGCAT_BYTES);
+            boolean finished = process.waitFor(3, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return "pid=" + pid + "\nlogcat=TIMEOUT\n" + output;
+            }
+            int status = process.exitValue();
+            if (output.trim().isEmpty()) {
+                return "pid=" + pid + "\nlogcat=EMPTY\nexit=" + status;
+            }
+            return "pid=" + pid + "\nexit=" + status + "\n" + output;
+        } catch (Throwable error) {
+            if (process != null) process.destroyForcibly();
+            return "pid=" + pid + "\nlogcat=FAILED: "
+                    + error.getClass().getSimpleName() + ": " + error.getMessage();
+        }
+    }
+
+    private static String readLimited(InputStream input, int limit) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(limit, 32 * 1024));
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        while (total < limit) {
+            int count = input.read(buffer, 0, Math.min(buffer.length, limit - total));
+            if (count < 0) break;
+            if (count == 0) continue;
+            output.write(buffer, 0, count);
+            total += count;
+        }
+        String text = output.toString(StandardCharsets.UTF_8.name());
+        return total >= limit ? text + "\n[LOGCAT TRUNCATED AT " + limit + " BYTES]" : text;
+    }
+
     private void chooseDiagnosticsDestination() {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TITLE,
-                "math-stage397-diagnostics-" + System.currentTimeMillis() + ".txt");
+                "math-stage398-diagnostics-" + System.currentTimeMillis() + ".txt");
         startActivityForResult(intent, CREATE_DIAGNOSTICS_FILE);
     }
 
@@ -218,7 +273,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/octet-stream");
         intent.putExtra(Intent.EXTRA_TITLE,
-                "math-stage397-tombstone-" + tombstoneTimestamp + ".pb");
+                "math-stage398-tombstone-" + tombstoneTimestamp + ".pb");
         startActivityForResult(intent, CREATE_TOMBSTONE_FILE);
     }
 
