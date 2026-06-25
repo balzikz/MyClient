@@ -40,13 +40,13 @@ public final class RuntimePreparationActivity extends Activity {
 
         root.addView(text("MATH RUNTIME PREPARER", 21, Color.WHITE, true));
         root.addView(text(
-                "Stage 3.2 / Local runtime preparation",
+                "Stage 3.2 / Complete runtime set",
                 12,
                 Color.rgb(98, 216, 139),
                 true));
 
         TextView note = text(
-                "Подготовщик использует только локально установленную копию Minecraft 1.26.31.1. Он проверяет профиль, создаёт приватный runtime MATH и считает SHA-256. На этом этапе библиотека Minecraft не запускается.",
+                "Подготовщик проверяет профиль и SHA-256 библиотек. Готовые файлы используются повторно, а недостающие добавляются локально. На этом экране нативная загрузка не выполняется.",
                 11,
                 Color.LTGRAY,
                 false);
@@ -58,7 +58,7 @@ public final class RuntimePreparationActivity extends Activity {
         root.addView(reportView);
 
         prepareButton = new Button(this);
-        prepareButton.setText("ПОДГОТОВИТЬ RUNTIME");
+        prepareButton.setText("ПОДГОТОВИТЬ / ОБНОВИТЬ RUNTIME");
         prepareButton.setOnClickListener(view -> prepareRuntime());
         root.addView(prepareButton);
 
@@ -68,7 +68,7 @@ public final class RuntimePreparationActivity extends Activity {
         root.addView(inspectButton);
 
         linkerButton = new Button(this);
-        linkerButton.setText("ПЕРЕЙТИ К STAGE 3.3");
+        linkerButton.setText("ПЕРЕЙТИ К STAGE 3.4");
         linkerButton.setEnabled(false);
         linkerButton.setOnClickListener(view ->
                 startActivity(new Intent(this, LinkerLoadLabActivity.class)));
@@ -89,7 +89,7 @@ public final class RuntimePreparationActivity extends Activity {
         prepareButton.setEnabled(false);
         copyButton.setEnabled(false);
         linkerButton.setEnabled(false);
-        reportView.setText("Preparing local Bedrock runtime...\n\nНе закрывай приложение до появления итогового отчёта.");
+        reportView.setText("Preparing complete runtime...\n\nНе закрывай приложение до появления итогового отчёта.");
 
         Context appContext = getApplicationContext();
         new Thread(() -> {
@@ -114,7 +114,7 @@ public final class RuntimePreparationActivity extends Activity {
     }
 
     private void refreshLinkerButton(String value) {
-        boolean ready = value.contains("Runtime preparation: READY FOR STAGE 3.3")
+        boolean ready = value.contains("Runtime preparation: READY FOR STAGE 3.4")
                 || value.contains("Prepared runtime: COMPLETE");
         linkerButton.setEnabled(!busy && ready);
     }
