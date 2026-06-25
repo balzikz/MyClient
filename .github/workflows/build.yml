@@ -44,11 +44,12 @@ jobs:
         run: |
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathclient.so"
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathlinker.so"
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathshim.so"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: math-client-native-debug
+          name: math-client-stage-4-shim-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
