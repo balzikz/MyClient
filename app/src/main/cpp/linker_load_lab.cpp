@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <array>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 
