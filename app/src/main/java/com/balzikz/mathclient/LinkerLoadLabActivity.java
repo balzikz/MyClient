@@ -27,13 +27,18 @@ public final class LinkerLoadLabActivity extends Activity {
     private static final String[] TEST_LIBRARIES = {
             "libc++_shared.so",
             "libfmod.so",
-            "libHttpClient.Android.so"
+            "libHttpClient.Android.so",
+            "libmaesdk.so",
+            "libPlayFabMultiplayer.so",
+            "libMediaDecoders_Android.so",
+            "libconscrypt_jni.so",
+            "libmcfix.so"
     };
 
     private TextView reportView;
     private Button runButton;
     private Button copyButton;
-    private String report = "Stage 3.3.2 has not started.";
+    private String report = "Stage 3.4 has not started.";
     private boolean busy;
 
     @Override
@@ -50,15 +55,15 @@ public final class LinkerLoadLabActivity extends Activity {
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
         scroll.addView(root);
 
-        root.addView(text("MATH LINKER LOAD LAB", 21, Color.WHITE, true));
+        root.addView(text("MATH SMALL RUNTIME CHAIN LAB", 21, Color.WHITE, true));
         root.addView(text(
-                "Stage 3.3.2 / Dedicated C linker bridge",
+                "Stage 3.4 / Eight-library ordered chain",
                 12,
                 Color.rgb(98, 216, 139),
                 true));
 
         TextView note = text(
-                "Лаборатория работает в отдельном процессе и загружает только libmathlinker.so, написанную на C без C++ runtime. После проверки SHA-256 она отдельно загружает Minecraft libc++_shared.so перед libHttpClient.Android.so и закрывает цепочку в обратном порядке. libminecraftpe.so остаётся запрещена.",
+                "Лаборатория работает в отдельном C-процессе. Она проверяет SHA-256 всех восьми малых библиотек, загружает Minecraft libc++ первой, удерживает все handles одновременно и закрывает их в обратном порядке. Явные функции и JNI_OnLoad не вызываются. libminecraftpe.so остаётся запрещена.",
                 11,
                 Color.LTGRAY,
                 false);
@@ -70,7 +75,7 @@ public final class LinkerLoadLabActivity extends Activity {
         root.addView(reportView);
 
         runButton = new Button(this);
-        runButton.setText("ЗАПУСТИТЬ C LINKER TEST");
+        runButton.setText("ЗАПУСТИТЬ 8-LIBRARY CHAIN");
         runButton.setOnClickListener(view -> runLinkerTest());
         root.addView(runButton);
 
@@ -86,8 +91,8 @@ public final class LinkerLoadLabActivity extends Activity {
     private void runPreflight() {
         File directory = runtimeDirectory();
         StringBuilder value = new StringBuilder();
-        value.append("MATH BEDROCK LINKER PREFLIGHT\n");
-        value.append("Stage: 3.3.2\n");
+        value.append("MATH BEDROCK SMALL RUNTIME PREFLIGHT\n");
+        value.append("Stage: 3.4\n");
         value.append("Process: ").append(processName()).append('\n');
         value.append("Runtime directory: ").append(directory.getAbsolutePath()).append("\n\n");
 
@@ -140,6 +145,9 @@ public final class LinkerLoadLabActivity extends Activity {
         value.append(LinkerBridge.loadStatus()).append('\n');
         ready &= LinkerBridge.isLoaded();
 
+        if (!ready) {
+            value.append("Action: return to Stage 3.2 and press ПОДГОТОВИТЬ RUNTIME.\n");
+        }
         value.append("Preflight verdict: ")
                 .append(ready ? "READY TO RUN" : "BLOCKED");
 
@@ -154,8 +162,8 @@ public final class LinkerLoadLabActivity extends Activity {
         runButton.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
-                "Running Stage 3.3.2 in secondary process...\n\n"
-                        + "The C bridge must start without libc++_shared.so. Minecraft library remains blocked.");
+                "Running Stage 3.4 in secondary process...\n\n"
+                        + "Eight small libraries will be loaded. Minecraft library remains blocked.");
 
         String path = runtimeDirectory().getAbsolutePath();
         new Thread(() -> {
@@ -166,9 +174,9 @@ public final class LinkerLoadLabActivity extends Activity {
                 busy = false;
                 runButton.setEnabled(true);
                 copyButton.setEnabled(true);
-                Toast.makeText(this, "C linker test завершён.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Small runtime chain завершён.", Toast.LENGTH_LONG).show();
             });
-        }, "MATH-C-Linker-Lab").start();
+        }, "MATH-Small-Runtime-Chain").start();
     }
 
     private File runtimeDirectory() {
@@ -185,16 +193,26 @@ public final class LinkerLoadLabActivity extends Activity {
     }
 
     private String expectedHash(String name) {
-        if ("libc++_shared.so".equals(name)) {
-            return BedrockProfile.CXX_SHARED_SHA256;
+        switch (name) {
+            case "libc++_shared.so":
+                return BedrockProfile.CXX_SHARED_SHA256;
+            case "libfmod.so":
+                return BedrockProfile.FMOD_SHA256;
+            case "libHttpClient.Android.so":
+                return BedrockProfile.HTTP_CLIENT_SHA256;
+            case "libmaesdk.so":
+                return BedrockProfile.MAE_SDK_SHA256;
+            case "libPlayFabMultiplayer.so":
+                return BedrockProfile.PLAYFAB_SHA256;
+            case "libMediaDecoders_Android.so":
+                return BedrockProfile.MEDIA_DECODERS_SHA256;
+            case "libconscrypt_jni.so":
+                return BedrockProfile.CONSCRYPT_SHA256;
+            case "libmcfix.so":
+                return BedrockProfile.SUPPORT_LIBRARY_SHA256;
+            default:
+                return "";
         }
-        if ("libfmod.so".equals(name)) {
-            return BedrockProfile.FMOD_SHA256;
-        }
-        if ("libHttpClient.Android.so".equals(name)) {
-            return BedrockProfile.HTTP_CLIENT_SHA256;
-        }
-        return "";
     }
 
     private String sha256(File file) throws Exception {
@@ -223,7 +241,7 @@ public final class LinkerLoadLabActivity extends Activity {
         }
 
         clipboard.setPrimaryClip(ClipData.newPlainText(
-                "MATH Linker Load Lab",
+                "MATH Small Runtime Chain",
                 report));
         Toast.makeText(this, "Отчёт скопирован.", Toast.LENGTH_SHORT).show();
     }
