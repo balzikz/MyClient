@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project(mathclient LANGUAGES C CXX)
 
+find_package(game-activity REQUIRED CONFIG)
+
 add_library(
         mathclient
         SHARED
@@ -22,8 +24,15 @@ add_library(
         crash_signal_trace.c
 )
 
+add_library(
+        mathshim
+        SHARED
+        math_shim.cpp
+)
+
 target_compile_features(mathclient PRIVATE cxx_std_20)
 target_compile_features(mathlinker PRIVATE c_std_17)
+target_compile_features(mathshim PRIVATE cxx_std_20)
 
 target_compile_options(
         mathclient
@@ -41,6 +50,21 @@ target_compile_options(
         -Wpedantic
 )
 
+target_compile_options(
+        mathshim
+        PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+)
+
+target_link_options(
+        mathshim
+        PRIVATE
+        "-Wl,-u,GameActivity_onCreate"
+)
+
+find_library(android-native-lib android)
 find_library(android-log-lib log)
 find_library(android-dl-lib dl)
 find_library(android-gles3-lib GLESv3)
@@ -58,6 +82,15 @@ target_link_libraries(
 target_link_libraries(
         mathlinker
         PRIVATE
+        ${android-log-lib}
+        ${android-dl-lib}
+)
+
+target_link_libraries(
+        mathshim
+        PRIVATE
+        game-activity::game-activity_static
+        ${android-native-lib}
         ${android-log-lib}
         ${android-dl-lib}
 )
