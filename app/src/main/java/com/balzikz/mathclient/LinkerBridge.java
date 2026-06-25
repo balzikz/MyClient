@@ -56,6 +56,18 @@ public final class LinkerBridge {
         }
     }
 
+    public static String runMinecraftSymbolProbe(String runtimeDirectory) {
+        if (!LOADED) {
+            return bridgeFailure("MATH BEDROCK ENTRYPOINT PROBE");
+        }
+
+        try {
+            return nativeRunMinecraftSymbolProbe(runtimeDirectory);
+        } catch (Throwable throwable) {
+            return jniFailure("MATH BEDROCK ENTRYPOINT PROBE", throwable);
+        }
+    }
+
     private static String bridgeFailure(String title) {
         return title + "\n"
                 + "Verdict: BLOCKED\n"
@@ -74,4 +86,6 @@ public final class LinkerBridge {
     private static native String nativeRunLinkerLoadTest(String runtimeDirectory);
 
     private static native String nativeRunMinecraftLoadTest(String runtimeDirectory);
+
+    private static native String nativeRunMinecraftSymbolProbe(String runtimeDirectory);
 }
