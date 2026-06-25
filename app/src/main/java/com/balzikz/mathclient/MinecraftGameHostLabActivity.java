@@ -40,10 +40,8 @@ public final class MinecraftGameHostLabActivity extends Activity {
         launch = new Button(this);
         launch.setText("ЗАПУСТИТЬ STAGE 3.9 GAME HOST");
         launch.setOnClickListener(view -> {
-            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting game_host");
-            Intent intent = new Intent();
-            intent.setClassName(getPackageName(), "com.mojang.minecraftpe.MainActivity");
-            startActivity(intent);
+            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting GameHostActivity");
+            startActivity(new Intent(this, GameHostActivity.class));
         });
         root.addView(launch);
 
