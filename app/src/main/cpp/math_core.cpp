@@ -11,7 +11,7 @@
 namespace {
 
 constexpr char kLogTag[] = "MATH-NATIVE";
-constexpr char kCoreVersion[] = "0.14.0-alpha";
+constexpr char kCoreVersion[] = "0.15.0-alpha";
 
 const char* detectAbi() {
 #if defined(__aarch64__)
@@ -110,6 +110,7 @@ Java_com_balzikz_mathclient_NativeBridge_nativeGetCoreInfo(JNIEnv* env, jclass) 
          << "Runtime Preparer: COMPLETE SET\n"
          << "Small Runtime Chain Lab: AVAILABLE\n"
          << "Minecraft Dlopen Lab: AVAILABLE\n"
+         << "Minecraft Entrypoint Probe: AVAILABLE\n"
          << "Crash Journal: ENABLED\n"
          << "C Linker Bridge: SEPARATE LIBRARY\n"
          << "Logcat tag: " << kLogTag;

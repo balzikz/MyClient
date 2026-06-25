@@ -55,6 +55,12 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".MinecraftSymbolProbeActivity"
+            android:exported="false"
+            android:process=":minecraft_probe"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".EglLabActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
