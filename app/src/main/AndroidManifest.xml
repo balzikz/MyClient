@@ -43,6 +43,12 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".LinkerLoadLabActivity"
+            android:exported="false"
+            android:process=":linker_lab"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".EglLabActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
