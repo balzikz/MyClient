@@ -22,7 +22,7 @@ import java.security.MessageDigest;
 import java.util.List;
 
 public final class MinecraftGameHostLabActivity extends Activity {
-    private static final int CREATE_TOMBSTONE_FILE = 394;
+    private static final int CREATE_TOMBSTONE_FILE = 395;
     private static final long MAX_TOMBSTONE_BYTES = 32L * 1024L * 1024L;
     private static final String[] LIBS = {
             "libc++_shared.so", "libfmod.so", "libHttpClient.Android.so", "libmaesdk.so",
@@ -53,7 +53,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
         root.addView(report);
 
         launch = new Button(this);
-        launch.setText("ЗАПУСТИТЬ STAGE 3.9.4 GAME HOST");
+        launch.setText("ЗАПУСТИТЬ STAGE 3.9.5 GAME HOST");
         launch.setOnClickListener(view -> {
             HostJournal.reset(this);
             HostJournal.write(this, "LAUNCH_REQUESTED", "Starting GameHostActivity");
@@ -107,7 +107,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
         File runtime = HostJournal.runtime(this);
         boolean ready = runtime.isDirectory()
                 && new File(runtime, "runtime-manifest.txt").isFile();
-        StringBuilder text = new StringBuilder("MATH GAMEACTIVITY HOST\nStage: 3.9.4\n\n");
+        StringBuilder text = new StringBuilder("MATH GAMEACTIVITY HOST\nStage: 3.9.5\n\n");
         for (String name : LIBS) {
             File file = new File(runtime, name);
             boolean ok = file.isFile() && file.canRead() && file.length() > 0;
@@ -164,7 +164,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
         }
         try (InputStream input = exit.getTraceInputStream()) {
             if (input == null) return "tombstone=UNAVAILABLE OR OVERWRITTEN";
-            File target = new File(getCacheDir(), "stage-3.9.4-native-tombstone.pb");
+            File target = new File(getCacheDir(), "stage-3.9.5-native-tombstone.pb");
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             long count;
             try (FileOutputStream output = new FileOutputStream(target, false)) {
@@ -194,7 +194,7 @@ public final class MinecraftGameHostLabActivity extends Activity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/octet-stream");
         intent.putExtra(Intent.EXTRA_TITLE,
-                "math-stage394-tombstone-" + tombstoneTimestamp + ".pb");
+                "math-stage395-tombstone-" + tombstoneTimestamp + ".pb");
         startActivityForResult(intent, CREATE_TOMBSTONE_FILE);
     }
 
