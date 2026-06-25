@@ -33,7 +33,7 @@ public final class LinkerLoadLabActivity extends Activity {
     private TextView reportView;
     private Button runButton;
     private Button copyButton;
-    private String report = "Stage 3.3.1 has not started.";
+    private String report = "Stage 3.3.2 has not started.";
     private boolean busy;
 
     @Override
@@ -52,13 +52,13 @@ public final class LinkerLoadLabActivity extends Activity {
 
         root.addView(text("MATH LINKER LOAD LAB", 21, Color.WHITE, true));
         root.addView(text(
-                "Stage 3.3.1 / Ordered dependency chain",
+                "Stage 3.3.2 / Dedicated C linker bridge",
                 12,
                 Color.rgb(98, 216, 139),
                 true));
 
         TextView note = text(
-                "Лаборатория работает в отдельном процессе MATH. Она проверяет точный SHA-256 трёх файлов, загружает Bedrock libc++_shared.so глобально перед libHttpClient.Android.so, не вызывает экспортированные функции и закрывает библиотеки в обратном порядке. libminecraftpe.so по-прежнему запрещена.",
+                "Лаборатория работает в отдельном процессе и загружает только libmathlinker.so, написанную на C без C++ runtime. После проверки SHA-256 она отдельно загружает Minecraft libc++_shared.so перед libHttpClient.Android.so и закрывает цепочку в обратном порядке. libminecraftpe.so остаётся запрещена.",
                 11,
                 Color.LTGRAY,
                 false);
@@ -70,7 +70,7 @@ public final class LinkerLoadLabActivity extends Activity {
         root.addView(reportView);
 
         runButton = new Button(this);
-        runButton.setText("ЗАПУСТИТЬ ORDERED LINKER TEST");
+        runButton.setText("ЗАПУСТИТЬ C LINKER TEST");
         runButton.setOnClickListener(view -> runLinkerTest());
         root.addView(runButton);
 
@@ -87,7 +87,7 @@ public final class LinkerLoadLabActivity extends Activity {
         File directory = runtimeDirectory();
         StringBuilder value = new StringBuilder();
         value.append("MATH BEDROCK LINKER PREFLIGHT\n");
-        value.append("Stage: 3.3.1\n");
+        value.append("Stage: 3.3.2\n");
         value.append("Process: ").append(processName()).append('\n');
         value.append("Runtime directory: ").append(directory.getAbsolutePath()).append("\n\n");
 
@@ -137,10 +137,8 @@ public final class LinkerLoadLabActivity extends Activity {
                 .append(minecraft.isFile() ? "YES" : "NO")
                 .append('\n');
         value.append("libminecraftpe.so load policy: DENY\n");
-        value.append("Native core: ")
-                .append(NativeBridge.isLoaded() ? "READY" : "FAILED")
-                .append('\n');
-        ready &= NativeBridge.isLoaded();
+        value.append(LinkerBridge.loadStatus()).append('\n');
+        ready &= LinkerBridge.isLoaded();
 
         value.append("Preflight verdict: ")
                 .append(ready ? "READY TO RUN" : "BLOCKED");
@@ -156,21 +154,21 @@ public final class LinkerLoadLabActivity extends Activity {
         runButton.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
-                "Running Stage 3.3.1 in secondary process...\n\n"
-                        + "Bedrock libc++ will be loaded before HTTP Client. Minecraft library remains blocked.");
+                "Running Stage 3.3.2 in secondary process...\n\n"
+                        + "The C bridge must start without libc++_shared.so. Minecraft library remains blocked.");
 
         String path = runtimeDirectory().getAbsolutePath();
         new Thread(() -> {
-            String result = NativeBridge.runLinkerLoadTest(path);
+            String result = LinkerBridge.runLinkerLoadTest(path);
             runOnUiThread(() -> {
                 report = result;
                 reportView.setText(result);
                 busy = false;
                 runButton.setEnabled(true);
                 copyButton.setEnabled(true);
-                Toast.makeText(this, "Ordered linker test завершён.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "C linker test завершён.", Toast.LENGTH_LONG).show();
             });
-        }, "MATH-Ordered-Linker-Lab").start();
+        }, "MATH-C-Linker-Lab").start();
     }
 
     private File runtimeDirectory() {
