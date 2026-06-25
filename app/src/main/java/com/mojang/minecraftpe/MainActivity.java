@@ -52,6 +52,8 @@ public class MainActivity extends GameActivity
     public native boolean isPublishBuild();
     public static native void nativeWaitCrashManagementSetupComplete();
 
+    private CrashManager mCrashManager;
+
     /**
      * Mirrors Minecraft 1.26.23.1 MainActivity.getExternalStoragePath().
      * This is the app-specific external files directory, not shared storage root.
@@ -130,6 +132,26 @@ public class MainActivity extends GameActivity
         return value;
     }
 
+    /**
+     * JNI-visible bootstrap contract confirmed from the exact 1.26.31.1 binary.
+     * The original method selects a Sentry endpoint, creates CrashManager, installs
+     * its global Java exception handler, stores it, and returns it. Network upload
+     * machinery is intentionally omitted; the lifecycle and JNI object contract are preserved.
+     */
+    public CrashManager initializeCrashManager(String crashDumpFolder, String currentSessionId) {
+        CrashManager manager = new CrashManager(
+                this,
+                crashDumpFolder == null ? "" : crashDumpFolder,
+                currentSessionId == null ? "" : currentSessionId);
+        manager.installGlobalExceptionHandler();
+        mCrashManager = manager;
+        HostJournal.write(this, "JAVA_INITIALIZE_CRASH_MANAGER",
+                "folder=" + describeIdentifier(manager.getCrashDumpFolder())
+                        + " session=" + describeIdentifier(manager.getCurrentSessionId())
+                        + " handler=INSTALLED");
+        return manager;
+    }
+
     private static String describeIdentifier(String value) {
         return value.isEmpty() ? "EMPTY" : "PRESENT length=" + value.length();
     }
@@ -164,7 +186,43 @@ final class BatteryMonitor {
 }
 
 final class CrashManager {
-    private CrashManager() {
+    private final MainActivity owner;
+    private final String crashDumpFolder;
+    private final String currentSessionId;
+    private Thread.UncaughtExceptionHandler previousHandler;
+
+    CrashManager(MainActivity owner, String crashDumpFolder, String currentSessionId) {
+        this.owner = owner;
+        this.crashDumpFolder = crashDumpFolder;
+        this.currentSessionId = currentSessionId;
+    }
+
+    String getCrashDumpFolder() {
+        return crashDumpFolder;
+    }
+
+    String getCurrentSessionId() {
+        return currentSessionId;
+    }
+
+    void installGlobalExceptionHandler() {
+        previousHandler = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            Thread.setDefaultUncaughtExceptionHandler(previousHandler);
+            HostJournal.write(owner, "JAVA_CRASH_MANAGER_UNCAUGHT",
+                    "thread=" + thread.getName()
+                            + " error=" + error.getClass().getName()
+                            + ": " + error.getMessage());
+            try {
+                nativeNotifyUncaughtException();
+            } catch (Throwable notifyError) {
+                HostJournal.write(owner, "JAVA_CRASH_MANAGER_NOTIFY_FAIL",
+                        notifyError.getClass().getName() + ": " + notifyError.getMessage());
+            }
+            if (previousHandler != null) {
+                previousHandler.uncaughtException(thread, error);
+            }
+        });
     }
 
     public static native String nativeNotifyUncaughtException();
