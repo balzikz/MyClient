@@ -37,6 +37,8 @@ public final class BedrockRuntimePreparer {
             "libHttpClient.Android.so",
             "libPlayFabMultiplayer.so",
             "libfmod.so",
+            "libMediaDecoders_Android.so",
+            "libconscrypt_jni.so",
             "libmcfix.so",
             "libminecraftpe.so"
     };
@@ -47,8 +49,8 @@ public final class BedrockRuntimePreparer {
     public static String prepare(Context context) {
         StringBuilder report = new StringBuilder();
         report.append("MATH BEDROCK RUNTIME PREPARER\n");
-        report.append("Stage: 3.2\n");
-        report.append("Mode: LOCAL EXTRACTION + HASH VERIFICATION\n");
+        report.append("Stage: 3.2 / runtime set revision 2\n");
+        report.append("Mode: LOCAL EXTRACTION + PINNED SHA-256 VERIFICATION\n");
         report.append("Native loading: NOT ATTEMPTED\n\n");
 
         try {
@@ -124,7 +126,7 @@ public final class BedrockRuntimePreparer {
             report.append("Runtime directory: ")
                     .append(profileDirectory.getAbsolutePath())
                     .append('\n');
-            report.append("Required payload: ").append(formatBytes(requiredBytes)).append('\n');
+            report.append("Maximum payload: ").append(formatBytes(requiredBytes)).append('\n');
             report.append("Available space: ").append(formatBytes(availableBytes)).append('\n');
             report.append("Safety margin: ").append(formatBytes(SAFETY_MARGIN_BYTES)).append('\n');
 
@@ -137,15 +139,25 @@ public final class BedrockRuntimePreparer {
             report.append("Space gate: PASS\n");
 
             List<PreparedLibrary> prepared = new ArrayList<>();
-            long copiedBytes = 0L;
+            long payloadBytes = 0L;
+            int copiedCount = 0;
+            int reusedCount = 0;
 
             report.append("\n=== EXTRACTION ===\n");
             for (String library : RUNTIME_LIBRARIES) {
                 LibrarySource source = sources.get(library);
                 File destination = new File(profileDirectory, library);
-                PreparedLibrary result = extractAndVerify(source, destination);
+                PreparedLibrary result = extractAndVerify(
+                        source,
+                        destination,
+                        expectedHashFor(library));
                 prepared.add(result);
-                copiedBytes += result.size;
+                payloadBytes += result.size;
+                if (result.reused) {
+                    reusedCount++;
+                } else {
+                    copiedCount++;
+                }
 
                 report.append(result.reused ? "[REUSED] " : "[COPIED] ")
                         .append(result.name)
@@ -171,13 +183,15 @@ public final class BedrockRuntimePreparer {
 
             report.append("\n=== RUNTIME VERDICT ===\n");
             report.append("Libraries prepared: ").append(prepared.size()).append('\n');
-            report.append("Prepared payload: ").append(formatBytes(copiedBytes)).append('\n');
+            report.append("Copied now: ").append(copiedCount).append('\n');
+            report.append("Verified and reused: ").append(reusedCount).append('\n');
+            report.append("Prepared payload: ").append(formatBytes(payloadBytes)).append('\n');
             report.append("Manifest: ").append(manifestFile.getAbsolutePath()).append('\n');
             report.append("Readability check: ")
                     .append(allReadable ? "PASS" : "FAIL")
                     .append('\n');
             report.append("Runtime preparation: ")
-                    .append(allReadable ? "READY FOR STAGE 3.3" : "FAILED")
+                    .append(allReadable ? "READY FOR STAGE 3.4" : "FAILED")
                     .append('\n');
             report.append("Safety: libraries were copied and hashed, never loaded or executed.");
         } catch (PackageManager.NameNotFoundException error) {
@@ -281,10 +295,15 @@ public final class BedrockRuntimePreparer {
 
     private static PreparedLibrary extractAndVerify(
             LibrarySource source,
-            File destination) throws Exception {
+            File destination,
+            String expectedHash) throws Exception {
+        if (expectedHash == null || expectedHash.isEmpty()) {
+            throw new IllegalStateException("No pinned hash for " + destination.getName());
+        }
+
         if (destination.isFile() && destination.length() == source.size) {
             String existingHash = sha256(destination);
-            if (!existingHash.isEmpty()) {
+            if (expectedHash.equalsIgnoreCase(existingHash)) {
                 destination.setReadable(true, true);
                 destination.setExecutable(true, true);
                 return new PreparedLibrary(
@@ -332,6 +351,15 @@ public final class BedrockRuntimePreparer {
                             + ", actual=" + written);
         }
 
+        String copiedHash = toHex(digest.digest());
+        if (!expectedHash.equalsIgnoreCase(copiedHash)) {
+            temporary.delete();
+            throw new IllegalStateException(
+                    "SHA-256 mismatch for " + destination.getName()
+                            + ": expected=" + expectedHash
+                            + ", actual=" + copiedHash);
+        }
+
         if (destination.exists() && !destination.delete()) {
             temporary.delete();
             throw new IllegalStateException("Cannot replace " + destination);
@@ -348,9 +376,34 @@ public final class BedrockRuntimePreparer {
                 destination.getName(),
                 destination,
                 written,
-                toHex(digest.digest()),
+                copiedHash,
                 false,
                 source.crc);
+    }
+
+    private static String expectedHashFor(String library) {
+        switch (library) {
+            case "libc++_shared.so":
+                return BedrockProfile.CXX_SHARED_SHA256;
+            case "libmaesdk.so":
+                return BedrockProfile.MAE_SDK_SHA256;
+            case "libHttpClient.Android.so":
+                return BedrockProfile.HTTP_CLIENT_SHA256;
+            case "libPlayFabMultiplayer.so":
+                return BedrockProfile.PLAYFAB_SHA256;
+            case "libfmod.so":
+                return BedrockProfile.FMOD_SHA256;
+            case "libMediaDecoders_Android.so":
+                return BedrockProfile.MEDIA_DECODERS_SHA256;
+            case "libconscrypt_jni.so":
+                return BedrockProfile.CONSCRYPT_SHA256;
+            case "libmcfix.so":
+                return BedrockProfile.SUPPORT_LIBRARY_SHA256;
+            case "libminecraftpe.so":
+                return BedrockProfile.ELF_SHA256;
+            default:
+                return "";
+        }
     }
 
     private static void writeManifest(
