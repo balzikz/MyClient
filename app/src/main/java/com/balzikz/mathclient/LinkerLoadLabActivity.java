@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -37,6 +38,7 @@ public final class LinkerLoadLabActivity extends Activity {
 
     private TextView reportView;
     private Button runButton;
+    private Button stage35Button;
     private Button copyButton;
     private String report = "Stage 3.4 has not started.";
     private boolean busy;
@@ -63,7 +65,7 @@ public final class LinkerLoadLabActivity extends Activity {
                 true));
 
         TextView note = text(
-                "Лаборатория работает в отдельном C-процессе. Она проверяет SHA-256 всех восьми малых библиотек, загружает Minecraft libc++ первой, удерживает все handles одновременно и закрывает их в обратном порядке. Явные функции и JNI_OnLoad не вызываются. libminecraftpe.so остаётся запрещена.",
+                "Лаборатория работает в отдельном C-процессе. Она проверяет SHA-256 восьми малых библиотек, загружает их одновременно и закрывает в обратном порядке. На Stage 3.4 libminecraftpe.so всё ещё не загружается.",
                 11,
                 Color.LTGRAY,
                 false);
@@ -78,6 +80,13 @@ public final class LinkerLoadLabActivity extends Activity {
         runButton.setText("ЗАПУСТИТЬ 8-LIBRARY CHAIN");
         runButton.setOnClickListener(view -> runLinkerTest());
         root.addView(runButton);
+
+        stage35Button = new Button(this);
+        stage35Button.setText("ПЕРЕЙТИ К STAGE 3.5");
+        stage35Button.setEnabled(false);
+        stage35Button.setOnClickListener(view ->
+                startActivity(new Intent(this, MinecraftLoadLabActivity.class)));
+        root.addView(stage35Button);
 
         copyButton = new Button(this);
         copyButton.setText("СКОПИРОВАТЬ ОТЧЁТ");
@@ -132,7 +141,9 @@ public final class LinkerLoadLabActivity extends Activity {
                     && !expected.isEmpty()
                     && expected.equalsIgnoreCase(actual);
             value.append("  expected sha256=").append(expected).append('\n');
-            value.append("  actual sha256=").append(actual.isEmpty() ? "UNAVAILABLE" : actual).append('\n');
+            value.append("  actual sha256=")
+                    .append(actual.isEmpty() ? "UNAVAILABLE" : actual)
+                    .append('\n');
             value.append("  hash gate=").append(hashReady ? "PASS" : "BLOCK").append('\n');
             ready &= hashReady;
         }
@@ -141,12 +152,12 @@ public final class LinkerLoadLabActivity extends Activity {
         value.append("libminecraftpe.so present: ")
                 .append(minecraft.isFile() ? "YES" : "NO")
                 .append('\n');
-        value.append("libminecraftpe.so load policy: DENY\n");
+        value.append("libminecraftpe.so load policy at Stage 3.4: DENY\n");
         value.append(LinkerBridge.loadStatus()).append('\n');
         ready &= LinkerBridge.isLoaded();
 
         if (!ready) {
-            value.append("Action: return to Stage 3.2 and press ПОДГОТОВИТЬ RUNTIME.\n");
+            value.append("Action: return to Stage 3.2 and update the runtime.\n");
         }
         value.append("Preflight verdict: ")
                 .append(ready ? "READY TO RUN" : "BLOCKED");
@@ -154,12 +165,14 @@ public final class LinkerLoadLabActivity extends Activity {
         report = value.toString();
         reportView.setText(report);
         runButton.setEnabled(ready);
+        stage35Button.setEnabled(false);
     }
 
     private void runLinkerTest() {
         if (busy) return;
         busy = true;
         runButton.setEnabled(false);
+        stage35Button.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
                 "Running Stage 3.4 in secondary process...\n\n"
@@ -174,6 +187,8 @@ public final class LinkerLoadLabActivity extends Activity {
                 busy = false;
                 runButton.setEnabled(true);
                 copyButton.setEnabled(true);
+                stage35Button.setEnabled(
+                        result.contains("Runtime verdict: READY FOR STAGE 3.5"));
                 Toast.makeText(this, "Small runtime chain завершён.", Toast.LENGTH_LONG).show();
             });
         }, "MATH-Small-Runtime-Chain").start();
