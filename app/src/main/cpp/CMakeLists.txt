@@ -16,6 +16,7 @@ add_library(
         SHARED
         linker_load_lab.c
         minecraft_load_lab.c
+        minecraft_symbol_probe.c
 )
 
 target_compile_features(mathclient PRIVATE cxx_std_20)
