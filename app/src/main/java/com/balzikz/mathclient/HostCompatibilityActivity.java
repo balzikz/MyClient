@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -18,6 +19,7 @@ public final class HostCompatibilityActivity extends Activity {
 
     private TextView reportView;
     private Button copyButton;
+    private Button runtimeButton;
     private String report = "Running read-only host discovery...";
 
     @Override
@@ -64,23 +66,33 @@ public final class HostCompatibilityActivity extends Activity {
         copyButton.setOnClickListener(view -> copyReport());
         root.addView(copyButton);
 
+        runtimeButton = new Button(this);
+        runtimeButton.setText("ПЕРЕЙТИ К STAGE 3.2");
+        runtimeButton.setEnabled(false);
+        runtimeButton.setOnClickListener(view ->
+                startActivity(new Intent(this, RuntimePreparationActivity.class)));
+        root.addView(runtimeButton);
+
         setContentView(scroll);
         runDiscovery();
     }
 
     private void runDiscovery() {
         copyButton.setEnabled(false);
+        runtimeButton.setEnabled(false);
         copyButton.setText("ПРОВЕРКА ВЫПОЛНЯЕТСЯ...");
         reportView.setText("Running read-only host discovery...");
 
         Context appContext = getApplicationContext();
         new Thread(() -> {
             String result = HostCompatibilityReport.create(appContext);
+            boolean ready = result.contains("Host compatibility: READY FOR STAGE 3.2");
             runOnUiThread(() -> {
                 report = result;
                 reportView.setText(result);
                 copyButton.setEnabled(true);
                 copyButton.setText("СКОПИРОВАТЬ ОТЧЁТ");
+                runtimeButton.setEnabled(ready);
                 Toast.makeText(this, "Host discovery завершён.", Toast.LENGTH_SHORT).show();
             });
         }, "MATH-Host-Discovery").start();
