@@ -59,25 +59,6 @@ public final class NativeBridge {
         }
     }
 
-    public static String runLinkerLoadTest(String runtimeDirectory) {
-        if (!LOADED) {
-            return "MATH BEDROCK LINKER LOAD LAB\n"
-                    + "Linker verdict: BLOCKED\n"
-                    + "Native core failed to load: "
-                    + LOAD_ERROR;
-        }
-
-        try {
-            return nativeRunLinkerLoadTest(runtimeDirectory);
-        } catch (Throwable throwable) {
-            return "MATH BEDROCK LINKER LOAD LAB\n"
-                    + "Linker verdict: JNI ERROR\n"
-                    + throwable.getClass().getSimpleName()
-                    + ": "
-                    + throwable.getMessage();
-        }
-    }
-
     public static void eglLabCreate() {
         if (LOADED) nativeEglLabCreate();
     }
@@ -143,8 +124,6 @@ public final class NativeBridge {
     private static native String nativeGetCoreInfo();
 
     private static native String nativeGetLoadedModules();
-
-    private static native String nativeRunLinkerLoadTest(String runtimeDirectory);
 
     private static native void nativeEglLabCreate();
 

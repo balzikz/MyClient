@@ -1,21 +1,35 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-project(mathclient LANGUAGES CXX)
+project(mathclient LANGUAGES C CXX)
 
 add_library(
         mathclient
         SHARED
         math_core.cpp
-        linker_load_lab.cpp
         egl_lab.cpp
         render_state_lab.cpp
         fast_guard_lab.cpp
 )
 
+add_library(
+        mathlinker
+        SHARED
+        linker_load_lab.c
+)
+
 target_compile_features(mathclient PRIVATE cxx_std_20)
+target_compile_features(mathlinker PRIVATE c_std_17)
 
 target_compile_options(
         mathclient
+        PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+)
+
+target_compile_options(
+        mathlinker
         PRIVATE
         -Wall
         -Wextra
@@ -34,4 +48,11 @@ target_link_libraries(
         ${android-dl-lib}
         ${android-gles3-lib}
         ${android-egl-lib}
+)
+
+target_link_libraries(
+        mathlinker
+        PRIVATE
+        ${android-log-lib}
+        ${android-dl-lib}
 )

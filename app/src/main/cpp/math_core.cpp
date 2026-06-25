@@ -11,7 +11,7 @@
 namespace {
 
 constexpr char kLogTag[] = "MATH-NATIVE";
-constexpr char kCoreVersion[] = "0.12.1-alpha";
+constexpr char kCoreVersion[] = "0.12.2-alpha";
 
 const char* detectAbi() {
 #if defined(__aarch64__)
@@ -108,7 +108,7 @@ Java_com_balzikz_mathclient_NativeBridge_nativeGetCoreInfo(JNIEnv* env, jclass) 
          << "Fast Guard Lab: AVAILABLE\n"
          << "Bedrock Host Lab: AVAILABLE\n"
          << "Runtime Preparer: AVAILABLE\n"
-         << "Linker Load Lab: AVAILABLE\n"
+         << "C Linker Bridge: SEPARATE LIBRARY\n"
          << "Logcat tag: " << kLogTag;
 
     logInfo("Native core status requested through JNI");
