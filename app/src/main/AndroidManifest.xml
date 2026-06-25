@@ -67,6 +67,12 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".MinecraftJniRegistrationActivity"
+            android:exported="false"
+            android:process=":jni_registration"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".EglLabActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
