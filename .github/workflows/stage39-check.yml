@@ -23,8 +23,20 @@ jobs:
           gradle-version: '9.4.1'
       - name: Compile Stage 3.9
         run: |
-          if ! gradle :app:assembleDebug --stacktrace >stage39.log 2>&1; then
-            tail -n 180 stage39.log
-            exit 1
-          fi
-          tail -n 40 stage39.log
+          set +e
+          gradle :app:assembleDebug --stacktrace >stage39.log 2>&1
+          code=$?
+          echo "$code" > stage39.exit
+          tail -n 240 stage39.log > stage39-tail.txt
+          exit 0
+      - name: Upload build tail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage39-build-tail
+          path: |
+            stage39-tail.txt
+            stage39.exit
+          if-no-files-found: error
+      - name: Enforce compile result
+        run: test "$(cat stage39.exit)" = "0"
