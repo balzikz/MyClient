@@ -14,18 +14,33 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define REPORT_CAPACITY (32 * 1024)
+#define REPORT_CAPACITY (64 * 1024)
+#define LIBRARY_COUNT 8
 
 static const char* LOG_TAG = "MATH-C-LINKER";
-static const char* FMOD_NAME = "libfmod.so";
-static const char* CPP_RUNTIME_NAME = "libc++_shared.so";
-static const char* HTTP_CLIENT_NAME = "libHttpClient.Android.so";
+
+typedef struct {
+    const char* name;
+    const char* role;
+    int flags;
+} LibrarySpec;
 
 typedef struct {
     const char* target;
     bool found;
     char path[PATH_MAX];
 } ModuleQuery;
+
+static const LibrarySpec LIBRARIES[LIBRARY_COUNT] = {
+        {"libc++_shared.so", "Bedrock C++ runtime", RTLD_NOW | RTLD_GLOBAL},
+        {"libfmod.so", "audio dependency", RTLD_NOW | RTLD_LOCAL},
+        {"libHttpClient.Android.so", "HTTP dependency", RTLD_NOW | RTLD_LOCAL},
+        {"libmaesdk.so", "Microsoft account services dependency", RTLD_NOW | RTLD_LOCAL},
+        {"libPlayFabMultiplayer.so", "PlayFab multiplayer dependency", RTLD_NOW | RTLD_LOCAL},
+        {"libMediaDecoders_Android.so", "Android media decoder dependency", RTLD_NOW | RTLD_LOCAL},
+        {"libconscrypt_jni.so", "Conscrypt JNI dependency", RTLD_NOW | RTLD_LOCAL},
+        {"libmcfix.so", "Bedrock support dependency", RTLD_NOW | RTLD_LOCAL},
+};
 
 static void appendf(char* report, size_t capacity, const char* format, ...) {
     size_t used = strnlen(report, capacity);
@@ -140,212 +155,178 @@ static const char* current_dl_error(void) {
     return error == NULL ? "unknown" : error;
 }
 
-static bool test_standalone_library(const char* directory, char* report) {
-    appendf(report, REPORT_CAPACITY,
-            "[TEST] %s\n"
-            "  role=standalone audio dependency\n",
-            FMOD_NAME);
-
-    char path[PATH_MAX];
-    long long size = 0;
-    if (!validate_library_path(directory, FMOD_NAME, path, &size, report)) {
-        appendf(report, REPORT_CAPACITY, "  result=FAIL\n");
-        return false;
-    }
-
-    char loaded_path[PATH_MAX] = {0};
-    bool loaded_before = find_loaded_module(FMOD_NAME, loaded_path, sizeof(loaded_path));
-    appendf(report, REPORT_CAPACITY,
-            "  loaded before=%s\n",
-            loaded_before ? "YES" : "NO");
-    if (loaded_before) {
-        appendf(report, REPORT_CAPACITY,
-                "  loaded path=%s\n"
-                "  result=FAIL PRELOADED MODULE\n",
-                loaded_path);
-        return false;
-    }
-
-    dlerror();
-    void* handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-    if (handle == NULL) {
-        appendf(report, REPORT_CAPACITY,
-                "  dlopen=FAIL\n"
-                "  linker error=%s\n"
-                "  result=FAIL\n",
-                current_dl_error());
-        return false;
-    }
-
-    appendf(report, REPORT_CAPACITY,
-            "  dlopen=PASS\n"
-            "  visible after load=%s\n"
-            "  explicit symbols invoked=NO\n",
-            find_loaded_module(FMOD_NAME, loaded_path, sizeof(loaded_path)) ? "YES" : "NO");
-
-    dlerror();
-    if (dlclose(handle) != 0) {
-        appendf(report, REPORT_CAPACITY,
-                "  dlclose=FAIL\n"
-                "  close error=%s\n"
-                "  result=FAIL\n",
-                current_dl_error());
-        return false;
-    }
-
-    appendf(report, REPORT_CAPACITY,
-            "  dlclose=PASS\n"
-            "  loaded after close=%s\n"
-            "  result=PASS\n",
-            find_loaded_module(FMOD_NAME, loaded_path, sizeof(loaded_path)) ? "YES" : "NO");
-    return true;
-}
-
-static bool test_http_chain(const char* directory, char* report) {
-    appendf(report, REPORT_CAPACITY,
-            "[CHAIN TEST] %s -> %s\n"
-            "  role=Bedrock C++ runtime followed by HTTP dependency\n",
-            CPP_RUNTIME_NAME,
-            HTTP_CLIENT_NAME);
-
-    char runtime_path[PATH_MAX];
-    char client_path[PATH_MAX];
-    long long runtime_size = 0;
-    long long client_size = 0;
-
-    appendf(report, REPORT_CAPACITY, "  dependency: %s\n", CPP_RUNTIME_NAME);
-    if (!validate_library_path(
-            directory,
-            CPP_RUNTIME_NAME,
-            runtime_path,
-            &runtime_size,
-            report)) {
-        appendf(report, REPORT_CAPACITY, "  chain result=FAIL\n");
-        return false;
-    }
-
-    appendf(report, REPORT_CAPACITY, "  target: %s\n", HTTP_CLIENT_NAME);
-    if (!validate_library_path(
-            directory,
-            HTTP_CLIENT_NAME,
-            client_path,
-            &client_size,
-            report)) {
-        appendf(report, REPORT_CAPACITY, "  chain result=FAIL\n");
-        return false;
-    }
-
-    char preloaded_runtime_path[PATH_MAX] = {0};
-    char preloaded_client_path[PATH_MAX] = {0};
-    bool runtime_loaded_before = find_loaded_module(
-            CPP_RUNTIME_NAME,
-            preloaded_runtime_path,
-            sizeof(preloaded_runtime_path));
-    bool client_loaded_before = find_loaded_module(
-            HTTP_CLIENT_NAME,
-            preloaded_client_path,
-            sizeof(preloaded_client_path));
-
-    appendf(report, REPORT_CAPACITY,
-            "  runtime loaded before=%s\n"
-            "  client loaded before=%s\n",
-            runtime_loaded_before ? "YES" : "NO",
-            client_loaded_before ? "YES" : "NO");
-
-    if (runtime_loaded_before) {
-        appendf(report, REPORT_CAPACITY,
-                "  preloaded runtime path=%s\n",
-                preloaded_runtime_path);
-    }
-    if (client_loaded_before) {
-        appendf(report, REPORT_CAPACITY,
-                "  preloaded client path=%s\n",
-                preloaded_client_path);
-    }
-    if (runtime_loaded_before || client_loaded_before) {
-        appendf(report, REPORT_CAPACITY,
-                "  chain result=FAIL PRELOADED MODULE\n");
-        return false;
-    }
-
-    dlerror();
-    void* runtime_handle = dlopen(runtime_path, RTLD_NOW | RTLD_GLOBAL);
-    if (runtime_handle == NULL) {
-        appendf(report, REPORT_CAPACITY,
-                "  runtime dlopen=FAIL\n"
-                "  linker error=%s\n"
-                "  chain result=FAIL\n",
-                current_dl_error());
-        return false;
-    }
-
-    char loaded_path[PATH_MAX] = {0};
-    appendf(report, REPORT_CAPACITY,
-            "  runtime dlopen=PASS\n"
-            "  runtime visibility=GLOBAL\n"
-            "  runtime visible after load=%s\n",
-            find_loaded_module(CPP_RUNTIME_NAME, loaded_path, sizeof(loaded_path))
-                    ? "YES" : "NO");
-
-    dlerror();
-    void* client_handle = dlopen(client_path, RTLD_NOW | RTLD_LOCAL);
-    if (client_handle == NULL) {
-        const char* error = current_dl_error();
-        appendf(report, REPORT_CAPACITY,
-                "  client dlopen=FAIL\n"
-                "  linker error=%s\n",
-                error);
+static void cleanup_loaded_handles(
+        void** handles,
+        int loaded_count,
+        char* report,
+        int* close_failures) {
+    appendf(report, REPORT_CAPACITY, "\n=== REVERSE CLEANUP ===\n");
+    for (int index = loaded_count - 1; index >= 0; --index) {
+        if (handles[index] == NULL) {
+            continue;
+        }
 
         dlerror();
-        int runtime_close = dlclose(runtime_handle);
+        int result = dlclose(handles[index]);
+        if (result == 0) {
+            appendf(report, REPORT_CAPACITY,
+                    "[CLOSE PASS] %s\n",
+                    LIBRARIES[index].name);
+        } else {
+            appendf(report, REPORT_CAPACITY,
+                    "[CLOSE FAIL] %s\n"
+                    "  close error=%s\n",
+                    LIBRARIES[index].name,
+                    current_dl_error());
+            ++(*close_failures);
+        }
+        handles[index] = NULL;
+    }
+}
+
+static bool run_full_small_library_chain(const char* directory, char* report) {
+    char paths[LIBRARY_COUNT][PATH_MAX];
+    long long sizes[LIBRARY_COUNT];
+    void* handles[LIBRARY_COUNT];
+    memset(paths, 0, sizeof(paths));
+    memset(sizes, 0, sizeof(sizes));
+    memset(handles, 0, sizeof(handles));
+
+    appendf(report, REPORT_CAPACITY, "=== PATH GATE ===\n");
+    for (int index = 0; index < LIBRARY_COUNT; ++index) {
         appendf(report, REPORT_CAPACITY,
-                "  runtime cleanup=%s\n"
-                "  chain result=FAIL\n",
-                runtime_close == 0 ? "PASS" : "FAIL");
+                "[FILE %d/%d] %s\n"
+                "  role=%s\n",
+                index + 1,
+                LIBRARY_COUNT,
+                LIBRARIES[index].name,
+                LIBRARIES[index].role);
+
+        if (!validate_library_path(
+                directory,
+                LIBRARIES[index].name,
+                paths[index],
+                &sizes[index],
+                report)) {
+            appendf(report, REPORT_CAPACITY,
+                    "Path verdict: BLOCKED AT %s\n",
+                    LIBRARIES[index].name);
+            return false;
+        }
+    }
+
+    appendf(report, REPORT_CAPACITY, "\n=== PROCESS BASELINE ===\n");
+    bool baseline_clean = true;
+    for (int index = 0; index < LIBRARY_COUNT; ++index) {
+        char loaded_path[PATH_MAX] = {0};
+        bool loaded = find_loaded_module(
+                LIBRARIES[index].name,
+                loaded_path,
+                sizeof(loaded_path));
+        appendf(report, REPORT_CAPACITY,
+                "%s: %s\n",
+                LIBRARIES[index].name,
+                loaded ? "PRELOADED" : "NOT LOADED");
+        if (loaded) {
+            appendf(report, REPORT_CAPACITY,
+                    "  loaded path=%s\n",
+                    loaded_path);
+            baseline_clean = false;
+        }
+    }
+
+    if (!baseline_clean) {
+        appendf(report, REPORT_CAPACITY,
+                "Baseline verdict: BLOCKED BY PRELOADED MODULE\n");
         return false;
     }
+    appendf(report, REPORT_CAPACITY, "Baseline verdict: CLEAN\n");
 
-    appendf(report, REPORT_CAPACITY,
-            "  client dlopen=PASS\n"
-            "  client visible after load=%s\n"
-            "  explicit symbols invoked=NO\n",
-            find_loaded_module(HTTP_CLIENT_NAME, loaded_path, sizeof(loaded_path))
-                    ? "YES" : "NO");
+    appendf(report, REPORT_CAPACITY, "\n=== ORDERED LOAD CHAIN ===\n");
+    int loaded_count = 0;
+    int close_failures = 0;
 
-    bool close_passed = true;
-
-    dlerror();
-    if (dlclose(client_handle) != 0) {
+    for (int index = 0; index < LIBRARY_COUNT; ++index) {
+        const char* visibility = index == 0 ? "GLOBAL" : "LOCAL";
         appendf(report, REPORT_CAPACITY,
-                "  client dlclose=FAIL\n"
-                "  close error=%s\n",
-                current_dl_error());
-        close_passed = false;
-    } else {
-        appendf(report, REPORT_CAPACITY, "  client dlclose=PASS\n");
+                "[LOAD %d/%d] %s\n"
+                "  role=%s\n"
+                "  visibility=%s\n",
+                index + 1,
+                LIBRARY_COUNT,
+                LIBRARIES[index].name,
+                LIBRARIES[index].role,
+                visibility);
+
+        dlerror();
+        handles[index] = dlopen(paths[index], LIBRARIES[index].flags);
+        if (handles[index] == NULL) {
+            appendf(report, REPORT_CAPACITY,
+                    "  dlopen=FAIL\n"
+                    "  linker error=%s\n"
+                    "  load chain=BLOCKED AT %s\n",
+                    current_dl_error(),
+                    LIBRARIES[index].name);
+            cleanup_loaded_handles(handles, loaded_count, report, &close_failures);
+            appendf(report, REPORT_CAPACITY,
+                    "Cleanup failures: %d\n",
+                    close_failures);
+            return false;
+        }
+
+        ++loaded_count;
+        char loaded_path[PATH_MAX] = {0};
+        bool visible = find_loaded_module(
+                LIBRARIES[index].name,
+                loaded_path,
+                sizeof(loaded_path));
+        appendf(report, REPORT_CAPACITY,
+                "  dlopen=PASS\n"
+                "  visible after load=%s\n"
+                "  explicit symbols invoked=NO\n"
+                "  JNI_OnLoad explicitly invoked=NO\n",
+                visible ? "YES" : "NO");
+        if (visible) {
+            appendf(report, REPORT_CAPACITY,
+                    "  loaded path=%s\n",
+                    loaded_path);
+        }
     }
 
-    dlerror();
-    if (dlclose(runtime_handle) != 0) {
+    appendf(report, REPORT_CAPACITY,
+            "\nSimultaneous handles: %d/%d\n"
+            "Ordered load chain: PASS\n",
+            loaded_count,
+            LIBRARY_COUNT);
+
+    cleanup_loaded_handles(handles, loaded_count, report, &close_failures);
+
+    appendf(report, REPORT_CAPACITY, "\n=== POST-CLOSE STATE ===\n");
+    int retained_count = 0;
+    for (int index = 0; index < LIBRARY_COUNT; ++index) {
+        char loaded_path[PATH_MAX] = {0};
+        bool retained = find_loaded_module(
+                LIBRARIES[index].name,
+                loaded_path,
+                sizeof(loaded_path));
         appendf(report, REPORT_CAPACITY,
-                "  runtime dlclose=FAIL\n"
-                "  close error=%s\n",
-                current_dl_error());
-        close_passed = false;
-    } else {
-        appendf(report, REPORT_CAPACITY, "  runtime dlclose=PASS\n");
+                "%s: %s\n",
+                LIBRARIES[index].name,
+                retained ? "RETAINED BY LINKER" : "UNLOADED");
+        if (retained) {
+            ++retained_count;
+            appendf(report, REPORT_CAPACITY,
+                    "  retained path=%s\n",
+                    loaded_path);
+        }
     }
 
     appendf(report, REPORT_CAPACITY,
-            "  client loaded after close=%s\n"
-            "  runtime loaded after close=%s\n"
-            "  chain result=%s\n",
-            find_loaded_module(HTTP_CLIENT_NAME, loaded_path, sizeof(loaded_path))
-                    ? "YES" : "NO",
-            find_loaded_module(CPP_RUNTIME_NAME, loaded_path, sizeof(loaded_path))
-                    ? "YES" : "NO",
-            close_passed ? "PASS" : "FAIL");
-    return close_passed;
+            "Close failures: %d\n"
+            "Retained modules after successful dlclose: %d\n",
+            close_failures,
+            retained_count);
+    return close_failures == 0;
 }
 
 static jstring run_linker_lab(JNIEnv* env, const char* requested_directory) {
@@ -355,13 +336,15 @@ static jstring run_linker_lab(JNIEnv* env, const char* requested_directory) {
     }
 
     appendf(report, REPORT_CAPACITY,
-            "MATH BEDROCK LINKER LOAD LAB\n"
-            "Stage: 3.3.2\n"
+            "MATH BEDROCK SMALL RUNTIME CHAIN LAB\n"
+            "Stage: 3.4\n"
             "Bridge: DEDICATED C LIBRARY (NO C++ RUNTIME)\n"
+            "Mode: 8-LIBRARY ORDERED DLOPEN + REVERSE DLCLOSE\n"
             "Process policy: SECONDARY APP PROCESS (:linker_lab)\n"
-            "Standalone flags: RTLD_NOW | RTLD_LOCAL\n"
-            "Runtime flags: RTLD_NOW | RTLD_GLOBAL\n"
+            "C++ runtime flags: RTLD_NOW | RTLD_GLOBAL\n"
+            "Dependency flags: RTLD_NOW | RTLD_LOCAL\n"
             "Explicit exported symbols called: NONE\n"
+            "JNI_OnLoad explicitly invoked: NONE\n"
             "ELF constructors: MAY RUN DURING DLOPEN\n"
             "libminecraftpe.so: BLOCKED BY POLICY\n\n");
 
@@ -369,7 +352,7 @@ static jstring run_linker_lab(JNIEnv* env, const char* requested_directory) {
     if (!canonical_path(requested_directory, directory, sizeof(directory))) {
         appendf(report, REPORT_CAPACITY,
                 "Directory gate: BLOCK\n"
-                "Linker verdict: INVALID RUNTIME DIRECTORY");
+                "Runtime verdict: INVALID RUNTIME DIRECTORY");
         jstring result = (*env)->NewStringUTF(env, report);
         free(report);
         return result;
@@ -378,60 +361,26 @@ static jstring run_linker_lab(JNIEnv* env, const char* requested_directory) {
     appendf(report, REPORT_CAPACITY,
             "=== DIRECTORY GATE ===\n"
             "Runtime directory: %s\n"
-            "Canonical path: PASS\n\n"
-            "=== PROCESS BASELINE ===\n",
+            "Canonical path: PASS\n\n",
             directory);
 
-    char baseline_path[PATH_MAX] = {0};
-    bool cpp_preloaded = find_loaded_module(
-            CPP_RUNTIME_NAME,
-            baseline_path,
-            sizeof(baseline_path));
-    appendf(report, REPORT_CAPACITY,
-            "C linker bridge loaded: YES\n"
-            "libc++_shared.so at process start: %s\n",
-            cpp_preloaded ? "YES" : "NO");
-    if (cpp_preloaded) {
-        appendf(report, REPORT_CAPACITY,
-                "Preloaded path: %s\n",
-                baseline_path);
-    }
-    appendf(report, REPORT_CAPACITY, "\n=== LOAD TESTS ===\n");
-
-    int passed = 0;
-    int failed = 0;
-
-    if (test_standalone_library(directory, report)) {
-        ++passed;
-    } else {
-        ++failed;
-    }
-
-    if (test_http_chain(directory, report)) {
-        ++passed;
-    } else {
-        ++failed;
-    }
+    bool passed = run_full_small_library_chain(directory, report);
 
     appendf(report, REPORT_CAPACITY,
-            "\n=== LINKER VERDICT ===\n"
-            "Test groups: 2\n"
-            "Passed: %d\n"
-            "Failed: %d\n"
+            "\n=== RUNTIME VERDICT ===\n"
+            "Small libraries planned: %d\n"
             "Minecraft library attempted: NO\n"
-            "Linker verdict: %s",
-            passed,
-            failed,
-            failed == 0 && passed == 2
-                    ? "READY FOR STAGE 3.4"
+            "Runtime verdict: %s",
+            LIBRARY_COUNT,
+            passed
+                    ? "READY FOR STAGE 3.5"
                     : "BLOCKED FOR DIAGNOSIS");
 
     __android_log_print(
             ANDROID_LOG_INFO,
             LOG_TAG,
-            "Stage 3.3.2 finished: passed=%d failed=%d",
-            passed,
-            failed);
+            "Stage 3.4 finished: %s",
+            passed ? "PASS" : "FAIL");
 
     jstring result = (*env)->NewStringUTF(env, report);
     free(report);
