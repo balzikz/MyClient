@@ -18,13 +18,15 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
 
 public final class MinecraftGameHostLabActivity extends Activity {
-    private static final int CREATE_TOMBSTONE_FILE = 396;
+    private static final int CREATE_TOMBSTONE_FILE = 397;
+    private static final int CREATE_DIAGNOSTICS_FILE = 1397;
     private static final long MAX_TOMBSTONE_BYTES = 32L * 1024L * 1024L;
-    private static final String STAGE = "3.9.6";
+    private static final String STAGE = "3.9.7";
     private static final String[] LIBS = {
             "libc++_shared.so", "libfmod.so", "libHttpClient.Android.so", "libmaesdk.so",
             "libPlayFabMultiplayer.so", "libMediaDecoders_Android.so", "libconscrypt_jni.so",
@@ -37,7 +39,8 @@ public final class MinecraftGameHostLabActivity extends Activity {
     private File cachedTombstone;
     private long tombstoneTimestamp;
 
-    @Override protected void onCreate(Bundle state) {
+    @Override
+    protected void onCreate(Bundle state) {
         super.onCreate(state);
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(Color.rgb(9, 11, 10));
@@ -60,11 +63,15 @@ public final class MinecraftGameHostLabActivity extends Activity {
         });
         root.addView(launch);
 
-        Button refresh = button("ОБНОВИТЬ TIMELINE И TOMBSTONE");
+        Button refresh = button("ОБНОВИТЬ TIMELINE И SIGNAL TRACE");
         refresh.setOnClickListener(view -> refresh());
         root.addView(refresh);
 
-        exportTombstone = button("СОХРАНИТЬ NATIVE TOMBSTONE (.PB)");
+        Button exportDiagnostics = button("СОХРАНИТЬ DIAGNOSTICS (.TXT)");
+        exportDiagnostics.setOnClickListener(view -> chooseDiagnosticsDestination());
+        root.addView(exportDiagnostics);
+
+        exportTombstone = button("СОХРАНИТЬ SYSTEM TOMBSTONE (.PB)");
         exportTombstone.setEnabled(false);
         exportTombstone.setOnClickListener(view -> chooseTombstoneDestination());
         root.addView(exportTombstone);
@@ -77,13 +84,24 @@ public final class MinecraftGameHostLabActivity extends Activity {
         return button;
     }
 
-    @Override protected void onResume() { super.onResume(); refresh(); }
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refresh();
+    }
 
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != CREATE_TOMBSTONE_FILE || resultCode != RESULT_OK || data == null) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri destination = data.getData();
-        if (destination == null || cachedTombstone == null || !cachedTombstone.isFile()) return;
+        if (requestCode == CREATE_DIAGNOSTICS_FILE) {
+            writeTextDocument(destination, buildReport());
+            return;
+        }
+        if (requestCode != CREATE_TOMBSTONE_FILE
+                || cachedTombstone == null
+                || !cachedTombstone.isFile()) return;
         try (InputStream input = new FileInputStream(cachedTombstone);
              OutputStream output = getContentResolver().openOutputStream(destination)) {
             if (output == null) throw new IllegalStateException("Destination stream is null");
@@ -91,12 +109,17 @@ public final class MinecraftGameHostLabActivity extends Activity {
             output.flush();
             HostJournal.write(this, "TOMBSTONE_EXPORTED", destination.toString());
         } catch (Throwable error) {
-            HostJournal.write(this, "TOMBSTONE_EXPORT_FAIL", error.getClass().getName() + ": " + error.getMessage());
+            HostJournal.write(this, "TOMBSTONE_EXPORT_FAIL",
+                    error.getClass().getName() + ": " + error.getMessage());
         }
         refresh();
     }
 
     private void refresh() {
+        report.setText(buildReport());
+    }
+
+    private String buildReport() {
         File runtime = HostJournal.runtime(this);
         boolean ready = runtime.isDirectory() && new File(runtime, "runtime-manifest.txt").isFile();
         StringBuilder text = new StringBuilder("MATH GAMEACTIVITY HOST\nStage: " + STAGE + "\n\n");
@@ -106,22 +129,28 @@ public final class MinecraftGameHostLabActivity extends Activity {
             text.append(ok ? "[READY] " : "[MISSING] ").append(name).append('\n');
             ready &= ok;
         }
-        text.append("\n=== HOST TIMELINE ===\n").append(HostJournal.read(this));
+        text.append("\n=== HOST TIMELINE TAIL ===\n").append(HostJournal.read(this));
+        text.append("\n=== NATIVE SIGNAL TRACE TAIL ===\n").append(HostJournal.readSignalTrace(this));
         text.append("\n=== LAST PROCESS EXIT ===\n").append(latestExitInfoAndCaptureTrace());
         text.append("\nPreflight: ").append(ready ? "READY" : "BLOCKED");
-        report.setText(text.toString());
         launch.setEnabled(ready);
-        exportTombstone.setEnabled(cachedTombstone != null && cachedTombstone.isFile() && cachedTombstone.length() > 0);
+        exportTombstone.setEnabled(cachedTombstone != null
+                && cachedTombstone.isFile()
+                && cachedTombstone.length() > 0);
+        return text.toString();
     }
 
     private String latestExitInfoAndCaptureTrace() {
         cachedTombstone = null;
         tombstoneTimestamp = 0L;
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return "ApplicationExitInfo requires Android 11+.";
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return "ApplicationExitInfo requires Android 11+.";
+        }
         ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
         if (manager == null) return "ActivityManager unavailable.";
         try {
-            List<ApplicationExitInfo> exits = manager.getHistoricalProcessExitReasons(getPackageName(), 0, 16);
+            List<ApplicationExitInfo> exits = manager.getHistoricalProcessExitReasons(
+                    getPackageName(), 0, 16);
             for (ApplicationExitInfo exit : exits) {
                 String process = exit.getProcessName();
                 if (process != null && process.endsWith(":game_host")) {
@@ -142,11 +171,15 @@ public final class MinecraftGameHostLabActivity extends Activity {
     }
 
     private String captureTrace(ApplicationExitInfo exit) {
-        if (exit.getReason() != ApplicationExitInfo.REASON_CRASH_NATIVE) return "tombstone=NOT A NATIVE CRASH";
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return "tombstone=Native traces require Android 12+.";
+        if (exit.getReason() != ApplicationExitInfo.REASON_CRASH_NATIVE) {
+            return "tombstone=NOT A NATIVE CRASH; use NATIVE SIGNAL TRACE above";
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return "tombstone=Native traces require Android 12+.";
+        }
         try (InputStream input = exit.getTraceInputStream()) {
             if (input == null) return "tombstone=UNAVAILABLE OR OVERWRITTEN";
-            File target = new File(getCacheDir(), "stage-3.9.6-native-tombstone.pb");
+            File target = new File(getCacheDir(), "stage-3.9.7-native-tombstone.pb");
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             long count;
             try (FileOutputStream output = new FileOutputStream(target, false)) {
@@ -154,14 +187,29 @@ public final class MinecraftGameHostLabActivity extends Activity {
                 output.flush();
                 output.getFD().sync();
             }
-            if (count <= 0) { target.delete(); return "tombstone=EMPTY"; }
+            if (count <= 0) {
+                target.delete();
+                return "tombstone=EMPTY";
+            }
             cachedTombstone = target;
             tombstoneTimestamp = exit.getTimestamp();
-            return "tombstone=CAPTURED\nbytes=" + count + "\nsha256=" + hex(digest.digest())
+            return "tombstone=CAPTURED"
+                    + "\nbytes=" + count
+                    + "\nsha256=" + hex(digest.digest())
                     + (count >= MAX_TOMBSTONE_BYTES ? "\nwarning=TRACE MAY BE TRUNCATED" : "");
         } catch (Throwable error) {
-            return "tombstone=CAPTURE FAILED: " + error.getClass().getSimpleName() + ": " + error.getMessage();
+            return "tombstone=CAPTURE FAILED: " + error.getClass().getSimpleName()
+                    + ": " + error.getMessage();
         }
+    }
+
+    private void chooseDiagnosticsDestination() {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TITLE,
+                "math-stage397-diagnostics-" + System.currentTimeMillis() + ".txt");
+        startActivityForResult(intent, CREATE_DIAGNOSTICS_FILE);
     }
 
     private void chooseTombstoneDestination() {
@@ -169,15 +217,30 @@ public final class MinecraftGameHostLabActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/octet-stream");
-        intent.putExtra(Intent.EXTRA_TITLE, "math-stage396-tombstone-" + tombstoneTimestamp + ".pb");
+        intent.putExtra(Intent.EXTRA_TITLE,
+                "math-stage397-tombstone-" + tombstoneTimestamp + ".pb");
         startActivityForResult(intent, CREATE_TOMBSTONE_FILE);
     }
 
-    private static long copy(InputStream input, OutputStream output, long limit, MessageDigest digest) throws Exception {
+    private void writeTextDocument(Uri destination, String text) {
+        try (OutputStream output = getContentResolver().openOutputStream(destination)) {
+            if (output == null) throw new IllegalStateException("Destination stream is null");
+            output.write(text.getBytes(StandardCharsets.UTF_8));
+            output.flush();
+            HostJournal.write(this, "DIAGNOSTICS_EXPORTED", destination.toString());
+        } catch (Throwable error) {
+            HostJournal.write(this, "DIAGNOSTICS_EXPORT_FAIL",
+                    error.getClass().getName() + ": " + error.getMessage());
+        }
+    }
+
+    private static long copy(InputStream input, OutputStream output, long limit,
+                             MessageDigest digest) throws Exception {
         byte[] buffer = new byte[64 * 1024];
         long total = 0L;
         while (total < limit) {
-            int count = input.read(buffer, 0, (int) Math.min(buffer.length, limit - total));
+            int wanted = (int) Math.min(buffer.length, limit - total);
+            int count = input.read(buffer, 0, wanted);
             if (count < 0) break;
             if (count == 0) continue;
             output.write(buffer, 0, count);
