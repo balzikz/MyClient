@@ -16,6 +16,7 @@ public final class MathApplication extends Application {
                 ? Application.getProcessName() : getPackageName();
         if (!process.endsWith(":game_host")) return;
 
+        installCrashJournal();
         HostJournal.write(this, "APPLICATION_START", process);
         try {
             File runtime = HostJournal.runtime(this);
@@ -39,9 +40,27 @@ public final class MathApplication extends Application {
             HostJournal.write(this, "SYSTEM_LOAD_PASS", "JNI_OnLoad returned");
         } catch (Throwable error) {
             hostReady = false;
-            hostStatus = error.getClass().getName() + ": " + error.getMessage();
+            hostStatus = describe(error);
             HostJournal.write(this, "APPLICATION_LOAD_FAIL", hostStatus);
         }
+    }
+
+    private void installCrashJournal() {
+        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            HostJournal.write(this, "UNCAUGHT_JAVA_EXCEPTION",
+                    thread.getName() + " | " + describe(error));
+            if (previous != null) {
+                previous.uncaughtException(thread, error);
+            } else {
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }
+        });
+    }
+
+    private static String describe(Throwable error) {
+        String message = error.getMessage();
+        return error.getClass().getName() + ": " + (message == null ? "NO MESSAGE" : message);
     }
 
     public static boolean isHostReady() {
