@@ -25,6 +25,7 @@ import java.util.Locale;
 public final class LinkerLoadLabActivity extends Activity {
 
     private static final String[] TEST_LIBRARIES = {
+            "libc++_shared.so",
             "libfmod.so",
             "libHttpClient.Android.so"
     };
@@ -32,7 +33,7 @@ public final class LinkerLoadLabActivity extends Activity {
     private TextView reportView;
     private Button runButton;
     private Button copyButton;
-    private String report = "Stage 3.3 has not started.";
+    private String report = "Stage 3.3.1 has not started.";
     private boolean busy;
 
     @Override
@@ -51,13 +52,13 @@ public final class LinkerLoadLabActivity extends Activity {
 
         root.addView(text("MATH LINKER LOAD LAB", 21, Color.WHITE, true));
         root.addView(text(
-                "Stage 3.3 / Isolated dependency loading",
+                "Stage 3.3.1 / Ordered dependency chain",
                 12,
                 Color.rgb(98, 216, 139),
                 true));
 
         TextView note = text(
-                "Лаборатория работает в отдельном процессе MATH. Она разрешает dlopen только для libfmod.so и libHttpClient.Android.so, не вызывает их функции и сразу выполняет dlclose. libminecraftpe.so жёстко запрещена на этом этапе.",
+                "Лаборатория работает в отдельном процессе MATH. Она проверяет точный SHA-256 трёх файлов, загружает Bedrock libc++_shared.so глобально перед libHttpClient.Android.so, не вызывает экспортированные функции и закрывает библиотеки в обратном порядке. libminecraftpe.so по-прежнему запрещена.",
                 11,
                 Color.LTGRAY,
                 false);
@@ -69,7 +70,7 @@ public final class LinkerLoadLabActivity extends Activity {
         root.addView(reportView);
 
         runButton = new Button(this);
-        runButton.setText("ЗАПУСТИТЬ LINKER TEST");
+        runButton.setText("ЗАПУСТИТЬ ORDERED LINKER TEST");
         runButton.setOnClickListener(view -> runLinkerTest());
         root.addView(runButton);
 
@@ -86,7 +87,7 @@ public final class LinkerLoadLabActivity extends Activity {
         File directory = runtimeDirectory();
         StringBuilder value = new StringBuilder();
         value.append("MATH BEDROCK LINKER PREFLIGHT\n");
-        value.append("Stage: 3.3\n");
+        value.append("Stage: 3.3.1\n");
         value.append("Process: ").append(processName()).append('\n');
         value.append("Runtime directory: ").append(directory.getAbsolutePath()).append("\n\n");
 
@@ -155,8 +156,8 @@ public final class LinkerLoadLabActivity extends Activity {
         runButton.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
-                "Running Stage 3.3 in secondary process...\n\n"
-                        + "Разрешены только две малые библиотеки. Minecraft library remains blocked.");
+                "Running Stage 3.3.1 in secondary process...\n\n"
+                        + "Bedrock libc++ will be loaded before HTTP Client. Minecraft library remains blocked.");
 
         String path = runtimeDirectory().getAbsolutePath();
         new Thread(() -> {
@@ -167,9 +168,9 @@ public final class LinkerLoadLabActivity extends Activity {
                 busy = false;
                 runButton.setEnabled(true);
                 copyButton.setEnabled(true);
-                Toast.makeText(this, "Linker test завершён.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Ordered linker test завершён.", Toast.LENGTH_LONG).show();
             });
-        }, "MATH-Linker-Load-Lab").start();
+        }, "MATH-Ordered-Linker-Lab").start();
     }
 
     private File runtimeDirectory() {
@@ -186,6 +187,9 @@ public final class LinkerLoadLabActivity extends Activity {
     }
 
     private String expectedHash(String name) {
+        if ("libc++_shared.so".equals(name)) {
+            return BedrockProfile.CXX_SHARED_SHA256;
+        }
         if ("libfmod.so".equals(name)) {
             return BedrockProfile.FMOD_SHA256;
         }

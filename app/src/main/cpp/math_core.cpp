@@ -11,7 +11,7 @@
 namespace {
 
 constexpr char kLogTag[] = "MATH-NATIVE";
-constexpr char kCoreVersion[] = "0.12.0-alpha";
+constexpr char kCoreVersion[] = "0.12.1-alpha";
 
 const char* detectAbi() {
 #if defined(__aarch64__)
