@@ -68,6 +68,18 @@ public final class LinkerBridge {
         }
     }
 
+    public static String runMinecraftJniRegistration(String runtimeDirectory) {
+        if (!LOADED) {
+            return bridgeFailure("MATH BEDROCK JNI REGISTRATION LAB");
+        }
+
+        try {
+            return nativeRunMinecraftJniRegistration(runtimeDirectory);
+        } catch (Throwable throwable) {
+            return jniFailure("MATH BEDROCK JNI REGISTRATION LAB", throwable);
+        }
+    }
+
     private static String bridgeFailure(String title) {
         return title + "\n"
                 + "Verdict: BLOCKED\n"
@@ -88,4 +100,6 @@ public final class LinkerBridge {
     private static native String nativeRunMinecraftLoadTest(String runtimeDirectory);
 
     private static native String nativeRunMinecraftSymbolProbe(String runtimeDirectory);
+
+    private static native String nativeRunMinecraftJniRegistration(String runtimeDirectory);
 }
