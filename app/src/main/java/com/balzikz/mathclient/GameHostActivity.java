@@ -6,7 +6,6 @@ import android.os.Bundle;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 
 import java.io.File;
@@ -15,7 +14,6 @@ import dalvik.system.BaseDexClassLoader;
 
 public final class GameHostActivity extends com.mojang.minecraftpe.MainActivity {
     private AssetManager targetAssets;
-    private boolean surfaceSeen;
     private volatile ClassLoader redirectedClassLoader;
 
     @Override
@@ -23,8 +21,10 @@ public final class GameHostActivity extends com.mojang.minecraftpe.MainActivity 
         super.attachBaseContext(base);
         try {
             targetAssets = base.createPackageContext("com.mojang.minecraftpe", 0).getAssets();
-        } catch (Throwable ignored) {
+        } catch (Throwable error) {
             targetAssets = null;
+            HostJournal.write(base, "TARGET_ASSETS_FAIL",
+                    error.getClass().getName() + ": " + error.getMessage());
         }
     }
 
@@ -76,7 +76,16 @@ public final class GameHostActivity extends com.mojang.minecraftpe.MainActivity 
                 View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-        findSurfaceLater(0);
+        SurfaceView surface = mSurfaceView;
+        HostJournal.write(this, "SURFACE_VIEW_AFTER_ONCREATE",
+                surface == null ? "NULL" : surface.getWidth() + "x" + surface.getHeight());
+    }
+
+    @Override
+    protected void onStart() {
+        HostJournal.write(this, "BEFORE_ONSTART", "Calling super.onStart");
+        super.onStart();
+        HostJournal.write(this, "AFTER_ONSTART", "super.onStart returned");
     }
 
     @Override
@@ -94,53 +103,56 @@ public final class GameHostActivity extends com.mojang.minecraftpe.MainActivity 
     }
 
     @Override
+    protected void onStop() {
+        HostJournal.write(this, "BEFORE_ONSTOP", "Calling super.onStop");
+        super.onStop();
+        HostJournal.write(this, "AFTER_ONSTOP", "super.onStop returned");
+    }
+
+    @Override
+    protected void onDestroy() {
+        HostJournal.write(this, "BEFORE_ONDESTROY", "Calling super.onDestroy");
+        super.onDestroy();
+        HostJournal.write(this, "AFTER_ONDESTROY", "super.onDestroy returned");
+    }
+
+    @Override
     public void onWindowFocusChanged(boolean focused) {
+        HostJournal.write(this, "BEFORE_WINDOW_FOCUS", Boolean.toString(focused));
         super.onWindowFocusChanged(focused);
-        HostJournal.write(this, "WINDOW_FOCUS", Boolean.toString(focused));
+        HostJournal.write(this, "AFTER_WINDOW_FOCUS", Boolean.toString(focused));
     }
 
-    private void findSurfaceLater(int attempt) {
-        getWindow().getDecorView().postDelayed(() -> {
-            if (surfaceSeen) return;
-            SurfaceView surface = findSurface(getWindow().getDecorView());
-            if (surface == null) {
-                if (attempt < 24) findSurfaceLater(attempt + 1);
-                else HostJournal.write(this, "SURFACE_NOT_FOUND", "25 attempts");
-                return;
-            }
-            surfaceSeen = true;
-            HostJournal.write(this, "SURFACE_VIEW_FOUND",
-                    surface.getWidth() + "x" + surface.getHeight());
-            surface.getHolder().addCallback(new SurfaceHolder.Callback() {
-                public void surfaceCreated(SurfaceHolder holder) {
-                    HostJournal.write(GameHostActivity.this, "SURFACE_CREATED",
-                            Boolean.toString(holder.getSurface().isValid()));
-                }
-                public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                    HostJournal.write(GameHostActivity.this, "SURFACE_CHANGED",
-                            width + "x" + height + " format=" + format);
-                }
-                public void surfaceDestroyed(SurfaceHolder holder) {
-                    HostJournal.write(GameHostActivity.this, "SURFACE_DESTROYED", "released");
-                }
-            });
-            if (surface.getHolder().getSurface().isValid()) {
-                HostJournal.write(this, "SURFACE_ALREADY_VALID",
-                        surface.getWidth() + "x" + surface.getHeight());
-            }
-        }, attempt == 0 ? 0 : 250);
+    @Override
+    public void surfaceCreated(SurfaceHolder holder) {
+        HostJournal.write(this, "BEFORE_SURFACE_CREATED",
+                Boolean.toString(holder.getSurface().isValid()));
+        super.surfaceCreated(holder);
+        HostJournal.write(this, "AFTER_SURFACE_CREATED",
+                Boolean.toString(holder.getSurface().isValid()));
     }
 
-    private SurfaceView findSurface(View view) {
-        if (view instanceof SurfaceView) return (SurfaceView) view;
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); ++i) {
-                SurfaceView found = findSurface(group.getChildAt(i));
-                if (found != null) return found;
-            }
-        }
-        return null;
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        HostJournal.write(this, "BEFORE_SURFACE_CHANGED",
+                width + "x" + height + " format=" + format);
+        super.surfaceChanged(holder, format, width, height);
+        HostJournal.write(this, "AFTER_SURFACE_CHANGED",
+                width + "x" + height + " format=" + format);
+    }
+
+    @Override
+    public void surfaceRedrawNeeded(SurfaceHolder holder) {
+        HostJournal.write(this, "BEFORE_SURFACE_REDRAW", "Calling native redraw");
+        super.surfaceRedrawNeeded(holder);
+        HostJournal.write(this, "AFTER_SURFACE_REDRAW", "Native redraw returned");
+    }
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
+        HostJournal.write(this, "BEFORE_SURFACE_DESTROYED", "Calling native destroy");
+        super.surfaceDestroyed(holder);
+        HostJournal.write(this, "AFTER_SURFACE_DESTROYED", "Native destroy returned");
     }
 
     private static final class BedrockLibraryClassLoader extends BaseDexClassLoader {
