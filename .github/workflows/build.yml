@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, stage-4.0-math-shim ]
   pull_request:
   workflow_dispatch:
 
