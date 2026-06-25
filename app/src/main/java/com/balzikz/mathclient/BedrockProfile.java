@@ -11,6 +11,8 @@ public final class BedrockProfile {
             "05118921400461470fd9a5597c5d0580f7779741";
     public static final String ELF_SHA256 =
             "3e7fe54c09bcc6ab3389ca7e25330fb7fe3fe69967703214b8e033fd1baee089";
+    public static final String CXX_SHARED_SHA256 =
+            "4397241b4bd20a8e579bfb41d21107857e12985f6a01ca0c2a5f83380d1270b4";
     public static final String FMOD_SHA256 =
             "5f9d8a0829463013265b10c18610911f5f53fe6df46ab9976d8e3c5bb87a4968";
     public static final String HTTP_CLIENT_SHA256 =
@@ -34,6 +36,6 @@ public final class BedrockProfile {
                 + "ABI: " + ABI + "\n"
                 + "Graphics backend: " + GRAPHICS_BACKEND + "\n"
                 + "Exact fingerprint match: " + exactMatch + "\n"
-                + "Hook policy: " + (exactMatch ? "ALLOW PROFILE" : "BLOCK UNKNOWN BUILD");
+                + "Profile action: " + (exactMatch ? "ALLOW" : "BLOCK UNKNOWN BUILD");
     }
 }
