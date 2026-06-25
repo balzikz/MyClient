@@ -8,4 +8,12 @@
         <item name="android:windowBackground">#090B0A</item>
         <item name="android:colorAccent">#62D88B</item>
     </style>
+
+    <style name="Theme.MathClient.GameHost" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:colorAccent">#62D88B</item>
+    </style>
 </resources>
