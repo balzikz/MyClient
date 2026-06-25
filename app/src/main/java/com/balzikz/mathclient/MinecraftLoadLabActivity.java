@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -17,13 +16,16 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.Locale;
 
-public final class LinkerLoadLabActivity extends Activity {
+public final class MinecraftLoadLabActivity extends Activity {
+
+    private static final String JOURNAL_NAME = "stage-3.5-journal.txt";
 
     private static final String[] TEST_LIBRARIES = {
             "libc++_shared.so",
@@ -33,14 +35,15 @@ public final class LinkerLoadLabActivity extends Activity {
             "libPlayFabMultiplayer.so",
             "libMediaDecoders_Android.so",
             "libconscrypt_jni.so",
-            "libmcfix.so"
+            "libmcfix.so",
+            "libminecraftpe.so"
     };
 
     private TextView reportView;
     private Button runButton;
-    private Button stage35Button;
+    private Button refreshButton;
     private Button copyButton;
-    private String report = "Stage 3.4 has not started.";
+    private String report = "Stage 3.5 preflight has not started.";
     private boolean busy;
 
     @Override
@@ -57,15 +60,15 @@ public final class LinkerLoadLabActivity extends Activity {
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
         scroll.addView(root);
 
-        root.addView(text("MATH SMALL RUNTIME CHAIN LAB", 21, Color.WHITE, true));
+        root.addView(text("MATH MINECRAFT DLOPEN LAB", 21, Color.WHITE, true));
         root.addView(text(
-                "Stage 3.4 / Eight-library ordered chain",
+                "Stage 3.5 / First isolated libminecraftpe.so load",
                 12,
                 Color.rgb(98, 216, 139),
                 true));
 
         TextView note = text(
-                "Лаборатория работает в отдельном C-процессе. Она проверяет SHA-256 восьми малых библиотек, загружает их одновременно и закрывает в обратном порядке. На Stage 3.4 libminecraftpe.so всё ещё не загружается.",
+                "Отдельный процесс глобально загружает восемь проверенных зависимостей, затем единожды вызывает dlopen для libminecraftpe.so. JNI_OnLoad, ANativeActivity_onCreate и игровые функции не вызываются. Перед опасным вызовом журнал синхронно сохраняется на диск. Если экран внезапно закроется, открой его снова и скопируй предыдущий журнал.",
                 11,
                 Color.LTGRAY,
                 false);
@@ -77,16 +80,15 @@ public final class LinkerLoadLabActivity extends Activity {
         root.addView(reportView);
 
         runButton = new Button(this);
-        runButton.setText("ЗАПУСТИТЬ 8-LIBRARY CHAIN");
-        runButton.setOnClickListener(view -> runLinkerTest());
+        runButton.setText("ЗАПУСТИТЬ MINECRAFT DLOPEN TEST");
+        runButton.setEnabled(false);
+        runButton.setOnClickListener(view -> runMinecraftTest());
         root.addView(runButton);
 
-        stage35Button = new Button(this);
-        stage35Button.setText("ПЕРЕЙТИ К STAGE 3.5");
-        stage35Button.setEnabled(false);
-        stage35Button.setOnClickListener(view ->
-                startActivity(new Intent(this, MinecraftLoadLabActivity.class)));
-        root.addView(stage35Button);
+        refreshButton = new Button(this);
+        refreshButton.setText("ОБНОВИТЬ PREFLIGHT / JOURNAL");
+        refreshButton.setOnClickListener(view -> runPreflight());
+        root.addView(refreshButton);
 
         copyButton = new Button(this);
         copyButton.setText("СКОПИРОВАТЬ ОТЧЁТ");
@@ -98,10 +100,33 @@ public final class LinkerLoadLabActivity extends Activity {
     }
 
     private void runPreflight() {
+        if (busy) return;
+        busy = true;
+        runButton.setEnabled(false);
+        refreshButton.setEnabled(false);
+        copyButton.setEnabled(false);
+        reportView.setText(
+                "Checking Stage 3.5 fingerprints...\n\n"
+                        + "libminecraftpe.so is 333 MiB, поэтому проверка выполняется в рабочем потоке.");
+
+        new Thread(() -> {
+            PreflightResult result = buildPreflight();
+            runOnUiThread(() -> {
+                report = result.report;
+                reportView.setText(result.report);
+                busy = false;
+                runButton.setEnabled(result.ready);
+                refreshButton.setEnabled(true);
+                copyButton.setEnabled(true);
+            });
+        }, "MATH-Minecraft-Preflight").start();
+    }
+
+    private PreflightResult buildPreflight() {
         File directory = runtimeDirectory();
         StringBuilder value = new StringBuilder();
-        value.append("MATH BEDROCK SMALL RUNTIME PREFLIGHT\n");
-        value.append("Stage: 3.4\n");
+        value.append("MATH BEDROCK MINECRAFT LOAD PREFLIGHT\n");
+        value.append("Stage: 3.5\n");
         value.append("Process: ").append(processName()).append('\n');
         value.append("Runtime directory: ").append(directory.getAbsolutePath()).append("\n\n");
 
@@ -148,50 +173,54 @@ public final class LinkerLoadLabActivity extends Activity {
             ready &= hashReady;
         }
 
-        File minecraft = new File(directory, "libminecraftpe.so");
-        value.append("libminecraftpe.so present: ")
-                .append(minecraft.isFile() ? "YES" : "NO")
-                .append('\n');
-        value.append("libminecraftpe.so load policy at Stage 3.4: DENY\n");
         value.append(LinkerBridge.loadStatus()).append('\n');
         ready &= LinkerBridge.isLoaded();
 
-        if (!ready) {
-            value.append("Action: return to Stage 3.2 and update the runtime.\n");
+        File journal = new File(directory, JOURNAL_NAME);
+        value.append("\n=== PREVIOUS STAGE 3.5 JOURNAL ===\n");
+        if (journal.isFile() && journal.canRead()) {
+            try {
+                value.append(readText(journal));
+            } catch (Exception error) {
+                value.append("Journal read failed: ")
+                        .append(error.getClass().getSimpleName())
+                        .append(": ")
+                        .append(error.getMessage())
+                        .append('\n');
+            }
+        } else {
+            value.append("No previous journal.\n");
         }
-        value.append("Preflight verdict: ")
-                .append(ready ? "READY TO RUN" : "BLOCKED");
 
-        report = value.toString();
-        reportView.setText(report);
-        runButton.setEnabled(ready);
-        stage35Button.setEnabled(false);
+        value.append("\nPreflight verdict: ")
+                .append(ready ? "READY TO ATTEMPT DLOPEN" : "BLOCKED");
+        return new PreflightResult(value.toString(), ready);
     }
 
-    private void runLinkerTest() {
+    private void runMinecraftTest() {
         if (busy) return;
         busy = true;
         runButton.setEnabled(false);
-        stage35Button.setEnabled(false);
+        refreshButton.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
-                "Running Stage 3.4 in secondary process...\n\n"
-                        + "Eight small libraries will be loaded. Minecraft library remains blocked.");
+                "Running Stage 3.5 in :minecraft_lab...\n\n"
+                        + "Dependencies will be loaded globally. The journal will be fsynced before libminecraftpe.so.\n"
+                        + "If this screen closes, reopen Stage 3.5 and copy the journal.");
 
         String path = runtimeDirectory().getAbsolutePath();
         new Thread(() -> {
-            String result = LinkerBridge.runLinkerLoadTest(path);
+            String result = LinkerBridge.runMinecraftLoadTest(path);
             runOnUiThread(() -> {
                 report = result;
                 reportView.setText(result);
                 busy = false;
                 runButton.setEnabled(true);
+                refreshButton.setEnabled(true);
                 copyButton.setEnabled(true);
-                stage35Button.setEnabled(
-                        result.contains("Runtime verdict: READY FOR STAGE 3.5"));
-                Toast.makeText(this, "Small runtime chain завершён.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Minecraft dlopen test завершён.", Toast.LENGTH_LONG).show();
             });
-        }, "MATH-Small-Runtime-Chain").start();
+        }, "MATH-Minecraft-Dlopen").start();
     }
 
     private File runtimeDirectory() {
@@ -204,7 +233,7 @@ public final class LinkerLoadLabActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             return android.app.Application.getProcessName();
         }
-        return getPackageName() + ":linker_lab (pid=" + android.os.Process.myPid() + ")";
+        return getPackageName() + ":minecraft_lab (pid=" + android.os.Process.myPid() + ")";
     }
 
     private String expectedHash(String name) {
@@ -225,6 +254,8 @@ public final class LinkerLoadLabActivity extends Activity {
                 return BedrockProfile.CONSCRYPT_SHA256;
             case "libmcfix.so":
                 return BedrockProfile.SUPPORT_LIBRARY_SHA256;
+            case "libminecraftpe.so":
+                return BedrockProfile.ELF_SHA256;
             default:
                 return "";
         }
@@ -247,6 +278,21 @@ public final class LinkerLoadLabActivity extends Activity {
         return hex.toString();
     }
 
+    private String readText(File file) throws Exception {
+        try (InputStream input = new BufferedInputStream(new FileInputStream(file));
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int count;
+            int total = 0;
+            while ((count = input.read(buffer)) != -1 && total < 64 * 1024) {
+                int accepted = Math.min(count, 64 * 1024 - total);
+                output.write(buffer, 0, accepted);
+                total += accepted;
+            }
+            return output.toString("UTF-8");
+        }
+    }
+
     private void copyReport() {
         ClipboardManager clipboard =
                 (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -256,7 +302,7 @@ public final class LinkerLoadLabActivity extends Activity {
         }
 
         clipboard.setPrimaryClip(ClipData.newPlainText(
-                "MATH Small Runtime Chain",
+                "MATH Minecraft Dlopen Lab",
                 report));
         Toast.makeText(this, "Отчёт скопирован.", Toast.LENGTH_SHORT).show();
     }
@@ -274,5 +320,15 @@ public final class LinkerLoadLabActivity extends Activity {
 
     private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private static final class PreflightResult {
+        final String report;
+        final boolean ready;
+
+        PreflightResult(String report, boolean ready) {
+            this.report = report;
+            this.ready = ready;
+        }
     }
 }

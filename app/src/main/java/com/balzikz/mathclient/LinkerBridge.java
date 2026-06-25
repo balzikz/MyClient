@@ -34,22 +34,44 @@ public final class LinkerBridge {
 
     public static String runLinkerLoadTest(String runtimeDirectory) {
         if (!LOADED) {
-            return "MATH BEDROCK LINKER LOAD LAB\n"
-                    + "Linker verdict: BLOCKED\n"
-                    + "C linker bridge failed to load: "
-                    + LOAD_ERROR;
+            return bridgeFailure("MATH BEDROCK LINKER LOAD LAB");
         }
 
         try {
             return nativeRunLinkerLoadTest(runtimeDirectory);
         } catch (Throwable throwable) {
-            return "MATH BEDROCK LINKER LOAD LAB\n"
-                    + "Linker verdict: JNI ERROR\n"
-                    + throwable.getClass().getSimpleName()
-                    + ": "
-                    + throwable.getMessage();
+            return jniFailure("MATH BEDROCK LINKER LOAD LAB", throwable);
         }
     }
 
+    public static String runMinecraftLoadTest(String runtimeDirectory) {
+        if (!LOADED) {
+            return bridgeFailure("MATH BEDROCK MINECRAFT DLOPEN LAB");
+        }
+
+        try {
+            return nativeRunMinecraftLoadTest(runtimeDirectory);
+        } catch (Throwable throwable) {
+            return jniFailure("MATH BEDROCK MINECRAFT DLOPEN LAB", throwable);
+        }
+    }
+
+    private static String bridgeFailure(String title) {
+        return title + "\n"
+                + "Verdict: BLOCKED\n"
+                + "C linker bridge failed to load: "
+                + LOAD_ERROR;
+    }
+
+    private static String jniFailure(String title, Throwable throwable) {
+        return title + "\n"
+                + "Verdict: JNI ERROR\n"
+                + throwable.getClass().getSimpleName()
+                + ": "
+                + throwable.getMessage();
+    }
+
     private static native String nativeRunLinkerLoadTest(String runtimeDirectory);
+
+    private static native String nativeRunMinecraftLoadTest(String runtimeDirectory);
 }
