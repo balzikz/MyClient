@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -19,6 +20,7 @@ public final class RuntimePreparationActivity extends Activity {
     private TextView reportView;
     private Button prepareButton;
     private Button copyButton;
+    private Button linkerButton;
     private String report = "Runtime preparation has not started.";
     private boolean busy;
 
@@ -65,6 +67,13 @@ public final class RuntimePreparationActivity extends Activity {
         inspectButton.setOnClickListener(view -> inspectRuntime());
         root.addView(inspectButton);
 
+        linkerButton = new Button(this);
+        linkerButton.setText("ПЕРЕЙТИ К STAGE 3.3");
+        linkerButton.setEnabled(false);
+        linkerButton.setOnClickListener(view ->
+                startActivity(new Intent(this, LinkerLoadLabActivity.class)));
+        root.addView(linkerButton);
+
         copyButton = new Button(this);
         copyButton.setText("СКОПИРОВАТЬ ОТЧЁТ");
         copyButton.setOnClickListener(view -> copyReport());
@@ -79,6 +88,7 @@ public final class RuntimePreparationActivity extends Activity {
         busy = true;
         prepareButton.setEnabled(false);
         copyButton.setEnabled(false);
+        linkerButton.setEnabled(false);
         reportView.setText("Preparing local Bedrock runtime...\n\nНе закрывай приложение до появления итогового отчёта.");
 
         Context appContext = getApplicationContext();
@@ -90,6 +100,7 @@ public final class RuntimePreparationActivity extends Activity {
                 busy = false;
                 prepareButton.setEnabled(true);
                 copyButton.setEnabled(true);
+                refreshLinkerButton(result);
                 Toast.makeText(this, "Runtime preparation завершён.", Toast.LENGTH_LONG).show();
             });
         }, "MATH-Runtime-Preparer").start();
@@ -99,6 +110,13 @@ public final class RuntimePreparationActivity extends Activity {
         if (busy) return;
         report = BedrockRuntimePreparer.inspectPrepared(getApplicationContext());
         reportView.setText(report);
+        refreshLinkerButton(report);
+    }
+
+    private void refreshLinkerButton(String value) {
+        boolean ready = value.contains("Runtime preparation: READY FOR STAGE 3.3")
+                || value.contains("Prepared runtime: COMPLETE");
+        linkerButton.setEnabled(!busy && ready);
     }
 
     private void copyReport() {

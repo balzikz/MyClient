@@ -6,6 +6,7 @@ add_library(
         mathclient
         SHARED
         math_core.cpp
+        linker_load_lab.cpp
         egl_lab.cpp
         render_state_lab.cpp
         fast_guard_lab.cpp
