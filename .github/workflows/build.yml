@@ -34,13 +34,17 @@ jobs:
         with:
           gradle-version: '9.4.1'
 
+      - name: Restore stable debug key
+        run: base64 --decode ci/math-debug.keystore.b64 > ci/math-debug.keystore
+
       - name: Build debug APK with native core
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify native libraries were packaged
+      - name: Verify native libraries and signature
         run: |
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathclient.so"
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathlinker.so"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
