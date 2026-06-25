@@ -1,6 +1,8 @@
 package com.mojang.minecraftpe;
 
+import android.content.SharedPreferences;
 import android.os.Environment;
+import android.preference.PreferenceManager;
 import android.view.KeyEvent;
 import android.view.View;
 
@@ -89,6 +91,39 @@ public class MainActivity extends GameActivity
         }
         HostJournal.write(this, "JAVA_GET_LEGACY_EXTERNAL_STORAGE_PATH", resultDetail);
         return path;
+    }
+
+    /** Mirrors Minecraft 1.26.23.1 preference-backed legacy device ID lookup. */
+    public String getLegacyDeviceID() {
+        String value = PreferenceManager.getDefaultSharedPreferences(this)
+                .getString("snooperId", "");
+        if (value == null) value = "";
+        HostJournal.write(this, "JAVA_GET_LEGACY_DEVICE_ID", describeIdentifier(value));
+        return value;
+    }
+
+    /** Mirrors Minecraft 1.26.23.1 preference-backed client ID lookup. */
+    public String getClientId() {
+        String value = PreferenceManager.getDefaultSharedPreferences(this)
+                .getString("clientId", "");
+        if (value == null) value = "";
+        HostJournal.write(this, "JAVA_GET_CLIENT_ID", describeIdentifier(value));
+        return value;
+    }
+
+    /** Mirrors Minecraft's preference-backed cached device ID setter. */
+    public void setCachedDeviceId(String deviceId) {
+        SharedPreferences.Editor editor = PreferenceManager
+                .getDefaultSharedPreferences(this)
+                .edit();
+        editor.putString("deviceId", deviceId == null ? "" : deviceId);
+        editor.apply();
+        HostJournal.write(this, "JAVA_SET_CACHED_DEVICE_ID",
+                describeIdentifier(deviceId == null ? "" : deviceId));
+    }
+
+    private static String describeIdentifier(String value) {
+        return value.isEmpty() ? "EMPTY" : "PRESENT length=" + value.length();
     }
 
     @Override
