@@ -9,9 +9,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 
+import java.io.File;
+
+import dalvik.system.BaseDexClassLoader;
+
 public final class GameHostActivity extends com.mojang.minecraftpe.MainActivity {
     private AssetManager targetAssets;
     private boolean surfaceSeen;
+    private volatile ClassLoader redirectedClassLoader;
 
     @Override
     protected void attachBaseContext(Context base) {
@@ -26,6 +31,34 @@ public final class GameHostActivity extends com.mojang.minecraftpe.MainActivity 
     @Override
     public AssetManager getAssets() {
         return targetAssets != null ? targetAssets : super.getAssets();
+    }
+
+    @Override
+    public ClassLoader getClassLoader() {
+        ClassLoader cached = redirectedClassLoader;
+        if (cached != null) return cached;
+
+        ClassLoader original = super.getClassLoader();
+        if (!(original instanceof BaseDexClassLoader)) return original;
+
+        File game = HostJournal.game(this);
+        if (!game.isFile() || !game.canRead()) return original;
+
+        synchronized (this) {
+            if (redirectedClassLoader != null) return redirectedClassLoader;
+            try {
+                String path = game.getCanonicalPath();
+                redirectedClassLoader = new BedrockLibraryClassLoader(
+                        (BaseDexClassLoader) original,
+                        path);
+                HostJournal.write(this, "CLASSLOADER_REDIRECT_READY", path);
+                return redirectedClassLoader;
+            } catch (Throwable error) {
+                HostJournal.write(this, "CLASSLOADER_REDIRECT_FAIL",
+                        error.getClass().getName() + ": " + error.getMessage());
+                return original;
+            }
+        }
     }
 
     @Override
@@ -108,5 +141,24 @@ public final class GameHostActivity extends com.mojang.minecraftpe.MainActivity 
             }
         }
         return null;
+    }
+
+    private static final class BedrockLibraryClassLoader extends BaseDexClassLoader {
+        private final BaseDexClassLoader delegate;
+        private final String minecraftPath;
+
+        BedrockLibraryClassLoader(BaseDexClassLoader delegate, String minecraftPath) {
+            super("", null, null, delegate);
+            this.delegate = delegate;
+            this.minecraftPath = minecraftPath;
+        }
+
+        @Override
+        public String findLibrary(String name) {
+            if ("minecraftpe".equals(name) || "libminecraftpe.so".equals(name)) {
+                return minecraftPath;
+            }
+            return delegate.findLibrary(name);
+        }
     }
 }
