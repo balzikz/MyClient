@@ -119,10 +119,6 @@ public class MainActivity extends GameActivity
         return value;
     }
 
-    /**
-     * Signature confirmed in the exact 1.26.31.1 libminecraftpe.so and behavior
-     * mirrored from the nearest public 1.26.23.1 MainActivity implementation.
-     */
     public CrashManager initializeCrashManager(String crashDumpFolder, String currentSessionId) {
         CrashManager manager = new CrashManager(
                 this,
@@ -133,7 +129,7 @@ public class MainActivity extends GameActivity
         HostJournal.write(this, "JAVA_INITIALIZE_CRASH_MANAGER",
                 "folder=" + describeIdentifier(manager.getCrashDumpFolder())
                         + " session=" + describeIdentifier(manager.getCurrentSessionId())
-                        + " handler=INSTALLED");
+                        + " surface=COMPLETE");
         return manager;
     }
 
@@ -172,28 +168,53 @@ final class BatteryMonitor {
 
 final class CrashManager {
     private final MainActivity owner;
-    private final String crashDumpFolder;
-    private final String currentSessionId;
-    private Thread.UncaughtExceptionHandler previousHandler;
+
+    public String mCrashDumpFolder;
+    public String mCrashUploadURI;
+    public String mCrashUploadURIWithSentryKey;
+    public String mCurrentSessionId;
+    public String mExceptionUploadURI;
+    public Thread.UncaughtExceptionHandler mPreviousUncaughtExceptionHandler;
 
     CrashManager(MainActivity owner, String crashDumpFolder, String currentSessionId) {
         this.owner = owner;
-        this.crashDumpFolder = crashDumpFolder;
-        this.currentSessionId = currentSessionId;
+        mCrashDumpFolder = crashDumpFolder;
+        mCurrentSessionId = currentSessionId;
+        mCrashUploadURI = "";
+        mCrashUploadURIWithSentryKey = "";
+        mExceptionUploadURI = "";
     }
 
     String getCrashDumpFolder() {
-        return crashDumpFolder;
+        return mCrashDumpFolder;
     }
 
-    String getCurrentSessionId() {
-        return currentSessionId;
+    public String getCurrentSessionId() {
+        return mCurrentSessionId;
+    }
+
+    public String getCrashUploadURI() {
+        HostJournal.write(owner, "JAVA_CRASH_MANAGER_GET_CRASH_URI", "EMPTY");
+        return mCrashUploadURI;
+    }
+
+    public String getExceptionUploadURI() {
+        HostJournal.write(owner, "JAVA_CRASH_MANAGER_GET_EXCEPTION_URI", "EMPTY");
+        return mExceptionUploadURI;
+    }
+
+    private String uploadCrashFile(String path, String attachment, String sentryPayload) {
+        HostJournal.write(owner, "JAVA_CRASH_MANAGER_UPLOAD_SKIPPED",
+                "path=" + describePath(path)
+                        + " attachment=" + describeText(attachment)
+                        + " payload=" + describeText(sentryPayload));
+        return "UploadDisabled";
     }
 
     void installGlobalExceptionHandler() {
-        previousHandler = Thread.getDefaultUncaughtExceptionHandler();
+        mPreviousUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
-            Thread.setDefaultUncaughtExceptionHandler(previousHandler);
+            Thread.setDefaultUncaughtExceptionHandler(mPreviousUncaughtExceptionHandler);
             HostJournal.write(owner, "JAVA_CRASH_MANAGER_UNCAUGHT",
                     "thread=" + thread.getName()
                             + " error=" + error.getClass().getName()
@@ -204,10 +225,20 @@ final class CrashManager {
                 HostJournal.write(owner, "JAVA_CRASH_MANAGER_NOTIFY_FAIL",
                         notifyError.getClass().getName() + ": " + notifyError.getMessage());
             }
-            if (previousHandler != null) {
-                previousHandler.uncaughtException(thread, error);
+            if (mPreviousUncaughtExceptionHandler != null) {
+                mPreviousUncaughtExceptionHandler.uncaughtException(thread, error);
             }
         });
+    }
+
+    private static String describePath(String value) {
+        if (value == null || value.isEmpty()) return "EMPTY";
+        return "PRESENT length=" + value.length();
+    }
+
+    private static String describeText(String value) {
+        if (value == null || value.isEmpty()) return "EMPTY";
+        return "PRESENT length=" + value.length();
     }
 
     public static native String nativeNotifyUncaughtException();
