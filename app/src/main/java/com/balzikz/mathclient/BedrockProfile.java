@@ -11,6 +11,10 @@ public final class BedrockProfile {
             "05118921400461470fd9a5597c5d0580f7779741";
     public static final String ELF_SHA256 =
             "3e7fe54c09bcc6ab3389ca7e25330fb7fe3fe69967703214b8e033fd1baee089";
+    public static final String FMOD_SHA256 =
+            "5f9d8a0829463013265b10c18610911f5f53fe6df46ab9976d8e3c5bb87a4968";
+    public static final String HTTP_CLIENT_SHA256 =
+            "836d493adad561a8b587b29b0c8dd1924069582b76cb702c5ef42bcd817a8b85";
 
     private BedrockProfile() {
     }
