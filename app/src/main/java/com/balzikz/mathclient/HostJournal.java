@@ -25,7 +25,7 @@ public final class HostJournal {
     public static synchronized void reset(Context context) {
         File file = new File(context.getNoBackupFilesDir(), NAME);
         String header = "MATH GAMEACTIVITY HOST TIMELINE\n"
-                + "stage=3.9.2\n"
+                + "stage=3.9.4\n"
                 + "started=" + System.currentTimeMillis() + "\n";
         try (FileOutputStream output = new FileOutputStream(file, false)) {
             output.write(header.getBytes(StandardCharsets.UTF_8));
