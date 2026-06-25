@@ -54,10 +54,6 @@ public class MainActivity extends GameActivity
 
     private CrashManager mCrashManager;
 
-    /**
-     * Mirrors Minecraft 1.26.23.1 MainActivity.getExternalStoragePath().
-     * This is the app-specific external files directory, not shared storage root.
-     */
     public String getExternalStoragePath() {
         File directory = getExternalFilesDir(null);
         String path = directory == null ? "" : directory.getAbsolutePath();
@@ -65,17 +61,12 @@ public class MainActivity extends GameActivity
         return path;
     }
 
-    /** Mirrors Minecraft 1.26.23.1 MainActivity.getInternalStoragePath(). */
     public String getInternalStoragePath() {
         String path = getDataDir().getAbsolutePath();
         HostJournal.write(this, "JAVA_GET_INTERNAL_STORAGE_PATH", path);
         return path;
     }
 
-    /**
-     * Mirrors Minecraft 1.26.23.1 legacy-storage probe. On modern scoped-storage
-     * devices this normally returns an empty string because the shared root is not writable.
-     */
     public String getLegacyExternalStoragePath(String gameFolder) {
         String path = "";
         String resultDetail;
@@ -96,7 +87,6 @@ public class MainActivity extends GameActivity
         return path;
     }
 
-    /** Mirrors Minecraft 1.26.23.1 preference-backed legacy device ID lookup. */
     public String getLegacyDeviceID() {
         String value = PreferenceManager.getDefaultSharedPreferences(this)
                 .getString("snooperId", "");
@@ -105,7 +95,6 @@ public class MainActivity extends GameActivity
         return value;
     }
 
-    /** Mirrors Minecraft 1.26.23.1 preference-backed client ID lookup. */
     public String getClientId() {
         String value = PreferenceManager.getDefaultSharedPreferences(this)
                 .getString("clientId", "");
@@ -114,7 +103,6 @@ public class MainActivity extends GameActivity
         return value;
     }
 
-    /** Mirrors Minecraft's preference-backed cached device ID setter. */
     public void setCachedDeviceId(String deviceId) {
         SharedPreferences.Editor editor = PreferenceManager
                 .getDefaultSharedPreferences(this)
@@ -125,19 +113,12 @@ public class MainActivity extends GameActivity
                 describeIdentifier(deviceId == null ? "" : deviceId));
     }
 
-    /** Mirrors Minecraft 1.26.23.1 MainActivity.createUUID(). */
     public String createUUID() {
         String value = UUID.randomUUID().toString().replaceAll("-", "");
         HostJournal.write(this, "JAVA_CREATE_UUID", "GENERATED length=" + value.length());
         return value;
     }
 
-    /**
-     * JNI-visible bootstrap contract confirmed from the exact 1.26.31.1 binary.
-     * The original method selects a Sentry endpoint, creates CrashManager, installs
-     * its global Java exception handler, stores it, and returns it. Network upload
-     * machinery is intentionally omitted; the lifecycle and JNI object contract are preserved.
-     */
     public CrashManager initializeCrashManager(String crashDumpFolder, String currentSessionId) {
         CrashManager manager = new CrashManager(
                 this,
