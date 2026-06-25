@@ -17,6 +17,7 @@ add_library(
         linker_load_lab.c
         minecraft_load_lab.c
         minecraft_symbol_probe.c
+        minecraft_jni_registration_lab.c
 )
 
 target_compile_features(mathclient PRIVATE cxx_std_20)
