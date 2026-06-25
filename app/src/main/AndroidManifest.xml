@@ -49,6 +49,12 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".MinecraftLoadLabActivity"
+            android:exported="false"
+            android:process=":minecraft_lab"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".EglLabActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
