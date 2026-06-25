@@ -11,6 +11,7 @@ import com.google.androidgamesdk.GameActivity;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.UUID;
 
 public class MainActivity extends GameActivity
         implements FilePickerManagerHandler, View.OnKeyListener {
@@ -120,6 +121,13 @@ public class MainActivity extends GameActivity
         editor.apply();
         HostJournal.write(this, "JAVA_SET_CACHED_DEVICE_ID",
                 describeIdentifier(deviceId == null ? "" : deviceId));
+    }
+
+    /** Mirrors Minecraft 1.26.23.1 MainActivity.createUUID(). */
+    public String createUUID() {
+        String value = UUID.randomUUID().toString().replaceAll("-", "");
+        HostJournal.write(this, "JAVA_CREATE_UUID", "GENERATED length=" + value.length());
+        return value;
     }
 
     private static String describeIdentifier(String value) {
