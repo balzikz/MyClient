@@ -41,7 +41,7 @@ public final class DiagnosticsActivity extends Activity {
         scroll.addView(root);
 
         root.addView(block(
-                "MATH DIAGNOSTICS\nStage 2.99 / Profile + EGL Lab",
+                "MATH DIAGNOSTICS\nStage 3.1 / Bedrock Host Discovery",
                 22,
                 Color.WHITE));
 
@@ -69,6 +69,12 @@ public final class DiagnosticsActivity extends Activity {
         copyButton.setEnabled(false);
         copyButton.setOnClickListener(view -> copyFullReport());
         root.addView(copyButton);
+
+        Button hostLab = new Button(this);
+        hostLab.setText("ОТКРЫТЬ BEDROCK HOST LAB");
+        hostLab.setOnClickListener(view ->
+                startActivity(new Intent(this, HostCompatibilityActivity.class)));
+        root.addView(hostLab);
 
         Button lab = new Button(this);
         lab.setText("ОТКРЫТЬ EGL LAB");
