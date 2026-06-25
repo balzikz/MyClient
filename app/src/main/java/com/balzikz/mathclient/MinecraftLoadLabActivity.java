@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -42,6 +43,7 @@ public final class MinecraftLoadLabActivity extends Activity {
     private TextView reportView;
     private Button runButton;
     private Button refreshButton;
+    private Button stage36Button;
     private Button copyButton;
     private String report = "Stage 3.5 preflight has not started.";
     private boolean busy;
@@ -68,7 +70,7 @@ public final class MinecraftLoadLabActivity extends Activity {
                 true));
 
         TextView note = text(
-                "Отдельный процесс глобально загружает восемь проверенных зависимостей, затем единожды вызывает dlopen для libminecraftpe.so. JNI_OnLoad, ANativeActivity_onCreate и игровые функции не вызываются. Перед опасным вызовом журнал синхронно сохраняется на диск. Если экран внезапно закроется, открой его снова и скопируй предыдущий журнал.",
+                "Отдельный процесс глобально загружает восемь проверенных зависимостей, затем единожды вызывает dlopen для libminecraftpe.so. JNI_OnLoad, ANativeActivity_onCreate и игровые функции не вызываются. Перед опасным вызовом журнал синхронно сохраняется на диск.",
                 11,
                 Color.LTGRAY,
                 false);
@@ -90,6 +92,13 @@ public final class MinecraftLoadLabActivity extends Activity {
         refreshButton.setOnClickListener(view -> runPreflight());
         root.addView(refreshButton);
 
+        stage36Button = new Button(this);
+        stage36Button.setText("ПЕРЕЙТИ К STAGE 3.6");
+        stage36Button.setEnabled(false);
+        stage36Button.setOnClickListener(view ->
+                startActivity(new Intent(this, MinecraftSymbolProbeActivity.class)));
+        root.addView(stage36Button);
+
         copyButton = new Button(this);
         copyButton.setText("СКОПИРОВАТЬ ОТЧЁТ");
         copyButton.setOnClickListener(view -> copyReport());
@@ -104,6 +113,7 @@ public final class MinecraftLoadLabActivity extends Activity {
         busy = true;
         runButton.setEnabled(false);
         refreshButton.setEnabled(false);
+        stage36Button.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
                 "Checking Stage 3.5 fingerprints...\n\n"
@@ -202,6 +212,7 @@ public final class MinecraftLoadLabActivity extends Activity {
         busy = true;
         runButton.setEnabled(false);
         refreshButton.setEnabled(false);
+        stage36Button.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
                 "Running Stage 3.5 in :minecraft_lab...\n\n"
@@ -218,6 +229,8 @@ public final class MinecraftLoadLabActivity extends Activity {
                 runButton.setEnabled(true);
                 refreshButton.setEnabled(true);
                 copyButton.setEnabled(true);
+                stage36Button.setEnabled(
+                        result.contains("Minecraft load verdict: READY FOR STAGE 3.6"));
                 Toast.makeText(this, "Minecraft dlopen test завершён.", Toast.LENGTH_LONG).show();
             });
         }, "MATH-Minecraft-Dlopen").start();
