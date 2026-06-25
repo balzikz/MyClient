@@ -18,6 +18,10 @@ public final class MathApplication extends Application {
 
         installCrashJournal();
         HostJournal.write(this, "APPLICATION_START", process);
+        LinkerBridge.setSignalMarker("APPLICATION_START");
+        String signalInstall = LinkerBridge.installSignalTrace(
+                HostJournal.signalTrace(this).getAbsolutePath());
+        HostJournal.write(this, "SIGNAL_TRACE_INSTALL", signalInstall);
         try {
             File runtime = HostJournal.runtime(this);
             File manifest = new File(runtime, "runtime-manifest.txt");
@@ -26,6 +30,7 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException("Bedrock runtime is missing");
             }
 
+            LinkerBridge.setSignalMarker("PREPARE_MINECRAFT_HOST");
             String preload = LinkerBridge.prepareMinecraftHost(runtime.getAbsolutePath());
             hostStatus = preload;
             if (!preload.contains("Verdict: READY FOR SYSTEM LOAD")) {
@@ -33,14 +38,19 @@ public final class MathApplication extends Application {
             }
 
             HostJournal.write(this, "DEPENDENCIES_READY", preload);
+            LinkerBridge.setSignalMarker("BEFORE_SYSTEM_LOAD");
             HostJournal.write(this, "BEFORE_SYSTEM_LOAD", game.getCanonicalPath());
             System.load(game.getCanonicalPath());
+            LinkerBridge.setSignalMarker("AFTER_SYSTEM_LOAD");
+            String signalRefresh = LinkerBridge.refreshSignalTrace();
+            HostJournal.write(this, "SIGNAL_TRACE_AFTER_LOAD", signalRefresh);
             hostReady = true;
             hostStatus = "SYSTEM LOAD PASS";
             HostJournal.write(this, "SYSTEM_LOAD_PASS", "JNI_OnLoad returned");
         } catch (Throwable error) {
             hostReady = false;
             hostStatus = describe(error);
+            LinkerBridge.setSignalMarker("APPLICATION_LOAD_FAIL");
             HostJournal.write(this, "APPLICATION_LOAD_FAIL", hostStatus);
         }
     }
@@ -48,6 +58,7 @@ public final class MathApplication extends Application {
     private void installCrashJournal() {
         Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            LinkerBridge.setSignalMarker("UNCAUGHT_JAVA_EXCEPTION");
             HostJournal.write(this, "UNCAUGHT_JAVA_EXCEPTION",
                     thread.getName() + " | " + describe(error));
             if (previous != null) {

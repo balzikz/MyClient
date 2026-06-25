@@ -1,6 +1,8 @@
 package com.mojang.minecraftpe;
 
+import android.content.SharedPreferences;
 import android.os.Environment;
+import android.preference.PreferenceManager;
 import android.view.KeyEvent;
 import android.view.View;
 
@@ -9,6 +11,7 @@ import com.google.androidgamesdk.GameActivity;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.UUID;
 
 public class MainActivity extends GameActivity
         implements FilePickerManagerHandler, View.OnKeyListener {
@@ -49,10 +52,8 @@ public class MainActivity extends GameActivity
     public native boolean isPublishBuild();
     public static native void nativeWaitCrashManagementSetupComplete();
 
-    /**
-     * Mirrors Minecraft 1.26.23.1 MainActivity.getExternalStoragePath().
-     * This is the app-specific external files directory, not shared storage root.
-     */
+    private CrashManager mCrashManager;
+
     public String getExternalStoragePath() {
         File directory = getExternalFilesDir(null);
         String path = directory == null ? "" : directory.getAbsolutePath();
@@ -60,17 +61,12 @@ public class MainActivity extends GameActivity
         return path;
     }
 
-    /** Mirrors Minecraft 1.26.23.1 MainActivity.getInternalStoragePath(). */
     public String getInternalStoragePath() {
         String path = getDataDir().getAbsolutePath();
         HostJournal.write(this, "JAVA_GET_INTERNAL_STORAGE_PATH", path);
         return path;
     }
 
-    /**
-     * Mirrors Minecraft 1.26.23.1 legacy-storage probe. On modern scoped-storage
-     * devices this normally returns an empty string because the shared root is not writable.
-     */
     public String getLegacyExternalStoragePath(String gameFolder) {
         String path = "";
         String resultDetail;
@@ -89,6 +85,56 @@ public class MainActivity extends GameActivity
         }
         HostJournal.write(this, "JAVA_GET_LEGACY_EXTERNAL_STORAGE_PATH", resultDetail);
         return path;
+    }
+
+    public String getLegacyDeviceID() {
+        String value = PreferenceManager.getDefaultSharedPreferences(this)
+                .getString("snooperId", "");
+        if (value == null) value = "";
+        HostJournal.write(this, "JAVA_GET_LEGACY_DEVICE_ID", describeIdentifier(value));
+        return value;
+    }
+
+    public String getClientId() {
+        String value = PreferenceManager.getDefaultSharedPreferences(this)
+                .getString("clientId", "");
+        if (value == null) value = "";
+        HostJournal.write(this, "JAVA_GET_CLIENT_ID", describeIdentifier(value));
+        return value;
+    }
+
+    public void setCachedDeviceId(String deviceId) {
+        SharedPreferences.Editor editor = PreferenceManager
+                .getDefaultSharedPreferences(this)
+                .edit();
+        editor.putString("deviceId", deviceId == null ? "" : deviceId);
+        editor.apply();
+        HostJournal.write(this, "JAVA_SET_CACHED_DEVICE_ID",
+                describeIdentifier(deviceId == null ? "" : deviceId));
+    }
+
+    public String createUUID() {
+        String value = UUID.randomUUID().toString().replaceAll("-", "");
+        HostJournal.write(this, "JAVA_CREATE_UUID", "GENERATED length=" + value.length());
+        return value;
+    }
+
+    public CrashManager initializeCrashManager(String crashDumpFolder, String currentSessionId) {
+        CrashManager manager = new CrashManager(
+                this,
+                crashDumpFolder == null ? "" : crashDumpFolder,
+                currentSessionId == null ? "" : currentSessionId);
+        manager.installGlobalExceptionHandler();
+        mCrashManager = manager;
+        HostJournal.write(this, "JAVA_INITIALIZE_CRASH_MANAGER",
+                "folder=" + describeIdentifier(manager.getCrashDumpFolder())
+                        + " session=" + describeIdentifier(manager.getCurrentSessionId())
+                        + " surface=COMPLETE");
+        return manager;
+    }
+
+    private static String describeIdentifier(String value) {
+        return value.isEmpty() ? "EMPTY" : "PRESENT length=" + value.length();
     }
 
     @Override
@@ -121,7 +167,78 @@ final class BatteryMonitor {
 }
 
 final class CrashManager {
-    private CrashManager() {
+    private final MainActivity owner;
+
+    public String mCrashDumpFolder;
+    public String mCrashUploadURI;
+    public String mCrashUploadURIWithSentryKey;
+    public String mCurrentSessionId;
+    public String mExceptionUploadURI;
+    public Thread.UncaughtExceptionHandler mPreviousUncaughtExceptionHandler;
+
+    CrashManager(MainActivity owner, String crashDumpFolder, String currentSessionId) {
+        this.owner = owner;
+        mCrashDumpFolder = crashDumpFolder;
+        mCurrentSessionId = currentSessionId;
+        mCrashUploadURI = "";
+        mCrashUploadURIWithSentryKey = "";
+        mExceptionUploadURI = "";
+    }
+
+    String getCrashDumpFolder() {
+        return mCrashDumpFolder;
+    }
+
+    public String getCurrentSessionId() {
+        return mCurrentSessionId;
+    }
+
+    public String getCrashUploadURI() {
+        HostJournal.write(owner, "JAVA_CRASH_MANAGER_GET_CRASH_URI", "EMPTY");
+        return mCrashUploadURI;
+    }
+
+    public String getExceptionUploadURI() {
+        HostJournal.write(owner, "JAVA_CRASH_MANAGER_GET_EXCEPTION_URI", "EMPTY");
+        return mExceptionUploadURI;
+    }
+
+    private String uploadCrashFile(String path, String attachment, String sentryPayload) {
+        HostJournal.write(owner, "JAVA_CRASH_MANAGER_UPLOAD_SKIPPED",
+                "path=" + describePath(path)
+                        + " attachment=" + describeText(attachment)
+                        + " payload=" + describeText(sentryPayload));
+        return "UploadDisabled";
+    }
+
+    void installGlobalExceptionHandler() {
+        mPreviousUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            Thread.setDefaultUncaughtExceptionHandler(mPreviousUncaughtExceptionHandler);
+            HostJournal.write(owner, "JAVA_CRASH_MANAGER_UNCAUGHT",
+                    "thread=" + thread.getName()
+                            + " error=" + error.getClass().getName()
+                            + ": " + error.getMessage());
+            try {
+                nativeNotifyUncaughtException();
+            } catch (Throwable notifyError) {
+                HostJournal.write(owner, "JAVA_CRASH_MANAGER_NOTIFY_FAIL",
+                        notifyError.getClass().getName() + ": " + notifyError.getMessage());
+            }
+            if (mPreviousUncaughtExceptionHandler != null) {
+                mPreviousUncaughtExceptionHandler.uncaughtException(thread, error);
+            }
+        });
+    }
+
+    private static String describePath(String value) {
+        if (value == null || value.isEmpty()) return "EMPTY";
+        return "PRESENT length=" + value.length();
+    }
+
+    private static String describeText(String value) {
+        if (value == null || value.isEmpty()) return "EMPTY";
+        return "PRESENT length=" + value.length();
     }
 
     public static native String nativeNotifyUncaughtException();

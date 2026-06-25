@@ -19,6 +19,7 @@ add_library(
         minecraft_symbol_probe.c
         minecraft_jni_registration_lab.c
         minecraft_game_host_preload.c
+        crash_signal_trace.c
 )
 
 target_compile_features(mathclient PRIVATE cxx_std_20)
