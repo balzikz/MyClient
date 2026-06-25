@@ -76,6 +76,12 @@ public final class DiagnosticsActivity extends Activity {
                 startActivity(new Intent(this, HostCompatibilityActivity.class)));
         root.addView(hostLab);
 
+        Button jniLab = new Button(this);
+        jniLab.setText("ОТКРЫТЬ STAGE 3.8 JNI REGISTRATION");
+        jniLab.setOnClickListener(view ->
+                startActivity(new Intent(this, MinecraftJniRegistrationActivity.class)));
+        root.addView(jniLab);
+
         Button lab = new Button(this);
         lab.setText("ОТКРЫТЬ EGL LAB");
         lab.setOnClickListener(view ->
