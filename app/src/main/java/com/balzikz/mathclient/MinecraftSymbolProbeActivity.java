@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -33,6 +34,7 @@ public final class MinecraftSymbolProbeActivity extends Activity {
 
     private TextView reportView;
     private Button runButton;
+    private Button stage37Button;
     private Button copyButton;
     private String report = "Stage 3.6 has not started.";
     private boolean busy;
@@ -74,6 +76,13 @@ public final class MinecraftSymbolProbeActivity extends Activity {
         runButton.setText("ЗАПУСТИТЬ ENTRYPOINT PROBE");
         runButton.setOnClickListener(view -> runProbe());
         root.addView(runButton);
+
+        stage37Button = new Button(this);
+        stage37Button.setText("ПЕРЕЙТИ К STAGE 3.7");
+        stage37Button.setEnabled(false);
+        stage37Button.setOnClickListener(view ->
+                startActivity(new Intent(this, MinecraftJavaContractActivity.class)));
+        root.addView(stage37Button);
 
         copyButton = new Button(this);
         copyButton.setText("СКОПИРОВАТЬ ОТЧЁТ");
@@ -121,12 +130,14 @@ public final class MinecraftSymbolProbeActivity extends Activity {
         report = value.toString();
         reportView.setText(report);
         runButton.setEnabled(ready);
+        stage37Button.setEnabled(false);
     }
 
     private void runProbe() {
         if (busy) return;
         busy = true;
         runButton.setEnabled(false);
+        stage37Button.setEnabled(false);
         copyButton.setEnabled(false);
         reportView.setText(
                 "Running Stage 3.6 in :minecraft_probe...\n\n"
@@ -141,6 +152,8 @@ public final class MinecraftSymbolProbeActivity extends Activity {
                 busy = false;
                 runButton.setEnabled(true);
                 copyButton.setEnabled(true);
+                stage37Button.setEnabled(
+                        result.contains("JNI_OnLoad owned by Minecraft: YES"));
                 Toast.makeText(this, "Entrypoint probe завершён.", Toast.LENGTH_LONG).show();
             });
         }, "MATH-Minecraft-Entrypoint-Probe").start();
