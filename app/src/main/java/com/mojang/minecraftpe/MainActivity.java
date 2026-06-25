@@ -119,6 +119,10 @@ public class MainActivity extends GameActivity
         return value;
     }
 
+    /**
+     * Signature confirmed directly in the exact 1.26.31.1 libminecraftpe.so and
+     * behavior mirrored from the nearest public 1.26.23.1 MainActivity smali.
+     */
     public CrashManager initializeCrashManager(String crashDumpFolder, String currentSessionId) {
         CrashManager manager = new CrashManager(
                 this,
