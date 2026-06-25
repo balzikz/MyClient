@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 
 public final class HostJournal {
     private static final String NAME = "stage-3.9-host-journal.txt";
-    private static final String SIGNAL_NAME = "stage-3.9.7-signal-trace.txt";
+    private static final String SIGNAL_NAME = "stage-3.9.8-signal-trace.txt";
     private static final int MAX_READ_BYTES = 96 * 1024;
 
     private HostJournal() {
@@ -30,9 +30,9 @@ public final class HostJournal {
     public static synchronized void reset(Context context) {
         long started = System.currentTimeMillis();
         writeFresh(new File(context.getNoBackupFilesDir(), NAME),
-                "MATH GAMEACTIVITY HOST TIMELINE\nstage=3.9.7\nstarted=" + started + "\n");
+                "MATH GAMEACTIVITY HOST TIMELINE\nstage=3.9.8\nstarted=" + started + "\n");
         writeFresh(signalTrace(context),
-                "MATH NATIVE SIGNAL TRACE\nstage=3.9.7\nstarted=" + started + "\n");
+                "MATH NATIVE SIGNAL TRACE\nstage=3.9.8\nstarted=" + started + "\n");
     }
 
     public static synchronized void write(Context context, String status, String detail) {
