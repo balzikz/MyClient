@@ -61,6 +61,12 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".MinecraftJavaContractActivity"
+            android:exported="false"
+            android:process=":java_contract"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".EglLabActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
