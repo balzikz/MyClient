@@ -33,6 +33,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".HostCompatibilityActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".EglLabActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
