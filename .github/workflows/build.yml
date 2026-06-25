@@ -38,7 +38,17 @@ jobs:
         run: base64 --decode ci/math-debug.keystore.b64 > ci/math-debug.keystore
 
       - name: Build debug APK with native core
-        run: gradle :app:assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set +e
+          gradle :app:assembleDebug --stacktrace > stage4-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "===== STAGE 4 BUILD FAILURE TAIL ====="
+            tail -n 250 stage4-build.log
+            exit "$status"
+          fi
+          echo "Stage 4 Gradle build completed successfully."
 
       - name: Verify native libraries and signature
         run: |
