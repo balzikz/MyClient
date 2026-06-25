@@ -45,6 +45,18 @@ public final class LinkerBridge {
         return call("MATH BEDROCK JNI REGISTRATION LAB", runtimeDirectory, 4);
     }
 
+    public static String prepareMinecraftHost(String runtimeDirectory) {
+        if (!LOADED) {
+            return "MATH GAME HOST PRELOAD\nVerdict: BLOCKED\n" + LOAD_ERROR;
+        }
+        try {
+            return nativePrepareMinecraftHost(runtimeDirectory);
+        } catch (Throwable throwable) {
+            return "MATH GAME HOST PRELOAD\nVerdict: JNI ERROR\n"
+                    + throwable.getClass().getSimpleName() + ": " + throwable.getMessage();
+        }
+    }
+
     private static String call(String title, String runtimeDirectory, int operation) {
         if (!LOADED) {
             return title + "\nVerdict: BLOCKED\nC linker bridge failed to load: " + LOAD_ERROR;
@@ -72,4 +84,5 @@ public final class LinkerBridge {
     private static native String nativeRunMinecraftLoadTest(String runtimeDirectory);
     private static native String nativeRunMinecraftSymbolProbe(String runtimeDirectory);
     private static native String nativeRunMinecraftJniRegistration(String runtimeDirectory);
+    private static native String nativePrepareMinecraftHost(String runtimeDirectory);
 }
