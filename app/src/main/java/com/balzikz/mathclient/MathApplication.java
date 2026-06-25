@@ -17,11 +17,12 @@ public final class MathApplication extends Application {
         if (!process.endsWith(":game_host")) return;
 
         installCrashJournal();
-        HostJournal.write(this, "APPLICATION_START", process);
+        HostJournal.write(this, "APPLICATION_START", process + " stage=4.0.0");
         LinkerBridge.setSignalMarker("APPLICATION_START");
         String signalInstall = LinkerBridge.installSignalTrace(
                 HostJournal.signalTrace(this).getAbsolutePath());
         HostJournal.write(this, "SIGNAL_TRACE_INSTALL", signalInstall);
+
         try {
             File runtime = HostJournal.runtime(this);
             File manifest = new File(runtime, "runtime-manifest.txt");
@@ -30,23 +31,18 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException("Bedrock runtime is missing");
             }
 
-            LinkerBridge.setSignalMarker("PREPARE_MINECRAFT_HOST");
+            LinkerBridge.setSignalMarker("PREPARE_STAGE_4_RUNTIME");
             String preload = LinkerBridge.prepareMinecraftHost(runtime.getAbsolutePath());
-            hostStatus = preload;
             if (!preload.contains("Verdict: READY FOR SYSTEM LOAD")) {
                 throw new IllegalStateException(preload);
             }
-
             HostJournal.write(this, "DEPENDENCIES_READY", preload);
-            LinkerBridge.setSignalMarker("BEFORE_SYSTEM_LOAD");
-            HostJournal.write(this, "BEFORE_SYSTEM_LOAD", game.getCanonicalPath());
-            System.load(game.getCanonicalPath());
-            LinkerBridge.setSignalMarker("AFTER_SYSTEM_LOAD");
-            String signalRefresh = LinkerBridge.refreshSignalTrace();
-            HostJournal.write(this, "SIGNAL_TRACE_AFTER_LOAD", signalRefresh);
+
+            LinkerBridge.setSignalMarker("CONFIGURE_MATH_SHIM");
+            String shimStatus = MathShimBridge.configure(this);
             hostReady = true;
-            hostStatus = "SYSTEM LOAD PASS";
-            HostJournal.write(this, "SYSTEM_LOAD_PASS", "JNI_OnLoad returned");
+            hostStatus = shimStatus;
+            HostJournal.write(this, "MATH_SHIM_READY", shimStatus);
         } catch (Throwable error) {
             hostReady = false;
             hostStatus = describe(error);
