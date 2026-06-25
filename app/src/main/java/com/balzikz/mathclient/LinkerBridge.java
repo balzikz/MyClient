@@ -29,6 +29,34 @@ public final class LinkerBridge {
         return LOADED ? "C linker bridge: READY" : "C linker bridge: FAILED\n" + LOAD_ERROR;
     }
 
+    public static String installSignalTrace(String path) {
+        if (!LOADED) return "SIGNAL TRACE BLOCKED: " + LOAD_ERROR;
+        try {
+            return nativeInstallSignalTrace(path);
+        } catch (Throwable throwable) {
+            return "SIGNAL TRACE INSTALL ERROR: " + throwable.getClass().getSimpleName()
+                    + ": " + throwable.getMessage();
+        }
+    }
+
+    public static String refreshSignalTrace() {
+        if (!LOADED) return "SIGNAL TRACE BLOCKED: " + LOAD_ERROR;
+        try {
+            return nativeRefreshSignalTrace();
+        } catch (Throwable throwable) {
+            return "SIGNAL TRACE REFRESH ERROR: " + throwable.getClass().getSimpleName()
+                    + ": " + throwable.getMessage();
+        }
+    }
+
+    public static void setSignalMarker(String marker) {
+        if (!LOADED) return;
+        try {
+            nativeSetSignalMarker(marker);
+        } catch (Throwable ignored) {
+        }
+    }
+
     public static String runLinkerLoadTest(String runtimeDirectory) {
         return call("MATH BEDROCK LINKER LOAD LAB", runtimeDirectory, 1);
     }
@@ -85,4 +113,7 @@ public final class LinkerBridge {
     private static native String nativeRunMinecraftSymbolProbe(String runtimeDirectory);
     private static native String nativeRunMinecraftJniRegistration(String runtimeDirectory);
     private static native String nativePrepareMinecraftHost(String runtimeDirectory);
+    private static native String nativeInstallSignalTrace(String path);
+    private static native String nativeRefreshSignalTrace();
+    private static native void nativeSetSignalMarker(String marker);
 }
