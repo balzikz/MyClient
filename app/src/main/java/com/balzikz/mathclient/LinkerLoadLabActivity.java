@@ -15,7 +15,12 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.security.MessageDigest;
+import java.util.Locale;
 
 public final class LinkerLoadLabActivity extends Activity {
 
@@ -102,7 +107,28 @@ public final class LinkerLoadLabActivity extends Activity {
                 value.append(" | ").append(file.length()).append(" bytes");
             }
             value.append('\n');
-            ready &= fileReady;
+
+            String expected = expectedHash(name);
+            String actual = "";
+            if (fileReady) {
+                try {
+                    actual = sha256(file);
+                } catch (Exception error) {
+                    value.append("  hash error=")
+                            .append(error.getClass().getSimpleName())
+                            .append(": ")
+                            .append(error.getMessage())
+                            .append('\n');
+                }
+            }
+
+            boolean hashReady = fileReady
+                    && !expected.isEmpty()
+                    && expected.equalsIgnoreCase(actual);
+            value.append("  expected sha256=").append(expected).append('\n');
+            value.append("  actual sha256=").append(actual.isEmpty() ? "UNAVAILABLE" : actual).append('\n');
+            value.append("  hash gate=").append(hashReady ? "PASS" : "BLOCK").append('\n');
+            ready &= hashReady;
         }
 
         File minecraft = new File(directory, "libminecraftpe.so");
@@ -157,6 +183,33 @@ public final class LinkerLoadLabActivity extends Activity {
             return android.app.Application.getProcessName();
         }
         return getPackageName() + ":linker_lab (pid=" + android.os.Process.myPid() + ")";
+    }
+
+    private String expectedHash(String name) {
+        if ("libfmod.so".equals(name)) {
+            return BedrockProfile.FMOD_SHA256;
+        }
+        if ("libHttpClient.Android.so".equals(name)) {
+            return BedrockProfile.HTTP_CLIENT_SHA256;
+        }
+        return "";
+    }
+
+    private String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
+            byte[] buffer = new byte[1024 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, count);
+            }
+        }
+
+        StringBuilder hex = new StringBuilder(64);
+        for (byte item : digest.digest()) {
+            hex.append(String.format(Locale.ROOT, "%02x", item));
+        }
+        return hex.toString();
     }
 
     private void copyReport() {
