@@ -8,16 +8,17 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 
 public final class HostJournal {
-    private static final String STAGE = "4.2.0";
-    private static final String NAME = "stage-4.2-host-journal.txt";
-    private static final String SIGNAL_NAME = "stage-4.2-signal-trace.txt";
-    private static final int MAX_READ_BYTES = 96 * 1024;
+    private static final String STAGE = "5.1.0";
+    private static final String NAME = "stage-5.1-host-journal.txt";
+    private static final String SIGNAL_NAME = "stage-5.1-signal-trace.txt";
+    private static final int MAX_READ_BYTES = 128 * 1024;
 
     private HostJournal() {
     }
 
     public static File runtime(Context context) {
-        return new File(new File(context.getNoBackupFilesDir(), "bedrock-runtime"), BedrockProfile.ID);
+        File root = new File(context.getNoBackupFilesDir(), "bedrock-runtime");
+        return new File(root, BedrockProfile.runtimeId(context));
     }
 
     public static File game(Context context) {
@@ -35,7 +36,7 @@ public final class HostJournal {
     public static synchronized void reset(Context context) {
         long started = System.currentTimeMillis();
         writeFresh(journal(context),
-                "MATH GAMEACTIVITY HOST TIMELINE\nstage=" + STAGE + "\nstarted=" + started + "\n");
+                "MATH HOST TIMELINE\nstage=" + STAGE + "\nstarted=" + started + "\n");
         writeFresh(signalTrace(context),
                 "MATH NATIVE SIGNAL TRACE\nstage=" + STAGE + "\nstarted=" + started + "\n");
     }
@@ -56,11 +57,11 @@ public final class HostJournal {
     }
 
     public static synchronized String read(Context context) {
-        return readTail(journal(context), "No Stage 4.2 journal yet.");
+        return readTail(journal(context), "No Stage 5.1 journal yet.");
     }
 
     public static synchronized String readSignalTrace(Context context) {
-        return readTail(signalTrace(context), "No Stage 4.2 native signal trace yet.");
+        return readTail(signalTrace(context), "No Stage 5.1 native signal trace yet.");
     }
 
     private static void writeFresh(File file, String text) {
