@@ -17,7 +17,7 @@ public final class MathApplication extends Application {
         if (!process.endsWith(":game_host")) return;
 
         installCrashJournal();
-        HostJournal.write(this, "APPLICATION_START", process + " stage=5.0.0");
+        HostJournal.write(this, "APPLICATION_START", process + " stage=5.0.1");
         LinkerBridge.setSignalMarker("APPLICATION_START");
         String signalInstall = LinkerBridge.installSignalTrace(
                 HostJournal.signalTrace(this).getAbsolutePath());
@@ -31,15 +31,13 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException("Bedrock runtime is missing");
             }
 
-            LinkerBridge.setSignalMarker("PREPARE_STAGE_5_0_RUNTIME");
+            LinkerBridge.setSignalMarker("PREPARE_STAGE_5_0_1_RUNTIME");
             String preload = LinkerBridge.prepareMinecraftHost(runtime.getAbsolutePath());
             if (!preload.contains("Verdict: READY FOR SYSTEM LOAD")) {
                 throw new IllegalStateException(preload);
             }
             HostJournal.write(this, "DEPENDENCIES_READY", preload);
 
-            // Loading mathshim first preserves it as android.app.lib_name while
-            // leaving libminecraftpe.so entirely under JVM/System.load ownership.
             LinkerBridge.setSignalMarker("CONFIGURE_MATH_SHIM");
             String shimStatus = MathShimBridge.configure(this);
             HostJournal.write(this, "MATH_SHIM_CONFIGURED", shimStatus);
@@ -58,21 +56,39 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException(loadStatus);
             }
 
-            // The signal tracer must learn the Minecraft mapping only after the
-            // VM has completed System.load and JNI_OnLoad successfully.
             String signalRefresh = LinkerBridge.refreshSignalTrace();
             HostJournal.write(this, "SIGNAL_TRACE_REFRESH_AFTER_SYSTEM_LOAD", signalRefresh);
 
+            LinkerBridge.setSignalMarker("BEDROCK_CONNECT_START");
+            String connectionStatus = MathShimBridge.connectLoadedRuntime(
+                    this,
+                    BedrockJvmLoader.loadedPath());
+            HostJournal.write(this, "BEDROCK_CONNECT_RESULT", connectionStatus);
+            if (!MathShimBridge.nativeIsRuntimeConnected()) {
+                throw new IllegalStateException(connectionStatus);
+            }
+
             hostReady = true;
-            hostStatus = "jvmLoad=" + loadStatus + " | shim=" + shimStatus;
-            LinkerBridge.setSignalMarker("BEDROCK_SYSTEM_LOAD_READY");
+            hostStatus = "jvmLoad=" + loadStatus
+                    + " | connection=" + connectionStatus
+                    + " | shim=" + shimStatus;
+            LinkerBridge.setSignalMarker("BEDROCK_ENTRYPOINTS_READY");
             HostJournal.write(this, "HOST_RUNTIME_READY", hostStatus);
         } catch (Throwable error) {
             hostReady = false;
             hostStatus = describe(error)
-                    + " | jvmLoad=" + BedrockJvmLoader.status();
+                    + " | jvmLoad=" + BedrockJvmLoader.status()
+                    + " | connection=" + safeConnectionStatus();
             LinkerBridge.setSignalMarker("APPLICATION_LOAD_FAIL");
             HostJournal.write(this, "APPLICATION_LOAD_FAIL", hostStatus);
+        }
+    }
+
+    private String safeConnectionStatus() {
+        try {
+            return MathShimBridge.nativeHandoffStatus();
+        } catch (Throwable error) {
+            return describe(error);
         }
     }
 
