@@ -2,10 +2,11 @@ package com.balzikz.mathclient;
 
 import android.content.Context;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 
 public final class HostJournal {
     private static final String NAME = "flarial-parity-bootstrap.txt";
@@ -42,11 +43,14 @@ public final class HostJournal {
 
     public static String read(Context context) {
         synchronized (LOCK) {
-            try {
-                File file = file(context);
-                return file.isFile()
-                        ? Files.readString(file.toPath(), StandardCharsets.UTF_8)
-                        : "No parity journal yet.";
+            File source = file(context);
+            if (!source.isFile()) return "No parity journal yet.";
+            try (FileInputStream input = new FileInputStream(source);
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[16 * 1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                return new String(output.toByteArray(), StandardCharsets.UTF_8);
             } catch (Throwable error) {
                 return "Journal read failed: " + error;
             }
