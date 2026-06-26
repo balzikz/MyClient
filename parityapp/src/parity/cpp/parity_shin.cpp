@@ -89,35 +89,44 @@ void on_launcher_loaded(JNIEnv* env, jobject, jstring path) {
     dlerror();
     auto native_create = reinterpret_cast<NativeCreate>(
             dlsym(handle, "ANativeActivity_onCreate"));
+    const char* create_error = dlerror();
+
+    dlerror();
     auto native_finish = reinterpret_cast<NativeFinish>(
             dlsym(handle, "ANativeActivity_finish"));
+    const char* finish_error = dlerror();
+
+    dlerror();
     auto android_main = reinterpret_cast<AndroidMain>(
             dlsym(handle, "android_main"));
-    const char* error = dlerror();
-
-    if (error != nullptr || native_create == nullptr || android_main == nullptr) {
-        __android_log_print(ANDROID_LOG_ERROR, kTag,
-                            "Required entrypoints missing: error=%s create=%p finish=%p main=%p",
-                            error == nullptr ? "none" : error,
-                            reinterpret_cast<void*>(native_create),
-                            reinterpret_cast<void*>(native_finish),
-                            reinterpret_cast<void*>(android_main));
-        dlclose(handle);
-        return;
-    }
+    const char* main_error = dlerror();
 
     g_game_handle = handle;
     g_native_create = native_create;
     g_native_finish = native_finish;
     g_android_main = android_main;
+
+    if (native_create == nullptr || android_main == nullptr) {
+        __android_log_print(ANDROID_LOG_WARN, kTag,
+                            "Legacy NativeActivity entrypoints unavailable; continuing GameActivity path "
+                            "create=%p createError=%s finish=%p finishError=%s main=%p mainError=%s",
+                            reinterpret_cast<void*>(native_create),
+                            create_error == nullptr ? "none" : create_error,
+                            reinterpret_cast<void*>(native_finish),
+                            finish_error == nullptr ? "none" : finish_error,
+                            reinterpret_cast<void*>(android_main),
+                            main_error == nullptr ? "none" : main_error);
+        return;
+    }
+
     __android_log_print(ANDROID_LOG_INFO, kTag,
-                        "Minecraft native library loaded successfully create=%p finish=%p main=%p",
+                        "Minecraft NativeActivity entrypoints ready create=%p finish=%p main=%p",
                         reinterpret_cast<void*>(native_create),
                         reinterpret_cast<void*>(native_finish),
                         reinterpret_cast<void*>(android_main));
 }
 
-constexpr JNINativeMethod kActivityMethods[] = {
+JNINativeMethod kActivityMethods[] = {
         {const_cast<char*>("nativeConfigureShimLogger"),
          const_cast<char*>("(Ljava/lang/String;)V"),
          reinterpret_cast<void*>(configure_shim_logger)},
@@ -129,7 +138,7 @@ constexpr JNINativeMethod kActivityMethods[] = {
          reinterpret_cast<void*>(on_launcher_loaded)},
 };
 
-constexpr JNINativeMethod kServiceMethods[] = {
+JNINativeMethod kServiceMethods[] = {
         {const_cast<char*>("nativeConfigureShimLogger"),
          const_cast<char*>("(Ljava/lang/String;)V"),
          reinterpret_cast<void*>(configure_shim_logger)},
@@ -167,7 +176,7 @@ ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size_t sa
     if (target != nullptr) {
         target(activity, saved_state, saved_state_size);
     } else {
-        log_line(ANDROID_LOG_ERROR, "ANativeActivity_onCreate called before library loaded");
+        log_line(ANDROID_LOG_WARN, "ANativeActivity_onCreate called without legacy target");
     }
 }
 
@@ -190,7 +199,7 @@ extern "C" JNIEXPORT void JNICALL android_main(void* app) {
     if (target != nullptr) {
         target(app);
     } else {
-        log_line(ANDROID_LOG_ERROR, "android_main called before library loaded");
+        log_line(ANDROID_LOG_WARN, "android_main called without legacy target");
     }
 }
 
