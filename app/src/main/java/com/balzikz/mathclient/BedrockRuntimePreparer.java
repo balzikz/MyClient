@@ -26,8 +26,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public final class BedrockRuntimePreparer {
-
-    private static final String TARGET_PACKAGE = "com.mojang.minecraftpe";
     private static final String ABI_PREFIX = "lib/arm64-v8a/";
     private static final long SAFETY_MARGIN_BYTES = 64L * 1024L * 1024L;
 
@@ -49,15 +47,15 @@ public final class BedrockRuntimePreparer {
     public static String prepare(Context context) {
         StringBuilder report = new StringBuilder();
         report.append("MATH BEDROCK RUNTIME PREPARER\n");
-        report.append("Stage: 3.2 / runtime set revision 2\n");
-        report.append("Mode: LOCAL EXTRACTION + PINNED SHA-256 VERIFICATION\n");
+        report.append("Stage: 5.1 / installed-build runtime\n");
+        report.append("Mode: LOCAL EXTRACTION + SHA-256 MANIFEST\n");
         report.append("Native loading: NOT ATTEMPTED\n\n");
 
         try {
-            PackageManager packageManager = context.getPackageManager();
-            PackageInfo packageInfo = getPackageInfo(packageManager);
-            ApplicationInfo applicationInfo = packageInfo.applicationInfo;
-            if (applicationInfo == null) {
+            PackageManager manager = context.getPackageManager();
+            PackageInfo packageInfo = getPackageInfo(manager);
+            ApplicationInfo appInfo = packageInfo.applicationInfo;
+            if (appInfo == null) {
                 return report.append("Runtime preparation: FAILED\n")
                         .append("Minecraft ApplicationInfo is missing.")
                         .toString();
@@ -66,25 +64,28 @@ public final class BedrockRuntimePreparer {
             long versionCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
                     ? packageInfo.getLongVersionCode()
                     : packageInfo.versionCode;
+            String versionName = packageInfo.versionName == null
+                    ? "unknown"
+                    : packageInfo.versionName;
+            boolean supported = BedrockProfile.isSupportedVersion(versionName);
+            String runtimeId = BedrockProfile.runtimeId(versionName, versionCode);
 
-            boolean profileVersionMatch = BedrockProfile.VERSION_NAME.equals(packageInfo.versionName)
-                    && BedrockProfile.VERSION_CODE == versionCode;
-
-            report.append("=== PROFILE GATE ===\n");
-            report.append("Expected profile: ").append(BedrockProfile.ID).append('\n');
-            report.append("Installed version: ").append(packageInfo.versionName).append('\n');
+            report.append("=== VERSION GATE ===\n");
+            report.append("Supported family: ")
+                    .append(BedrockProfile.SUPPORTED_VERSION_PREFIX)
+                    .append(".x\n");
+            report.append("Installed version: ").append(versionName).append('\n');
             report.append("Installed version code: ").append(versionCode).append('\n');
-            report.append("Version gate: ")
-                    .append(profileVersionMatch ? "PASS" : "BLOCK")
-                    .append("\n\n");
+            report.append("Runtime id: ").append(runtimeId).append('\n');
+            report.append("Version gate: ").append(supported ? "PASS" : "BLOCK").append("\n\n");
 
-            if (!profileVersionMatch) {
+            if (!supported) {
                 return report.append("Runtime preparation: BLOCKED UNKNOWN VERSION\n")
                         .append("No files were copied.")
                         .toString();
             }
 
-            List<String> apkPaths = collectApkPaths(applicationInfo);
+            List<String> apkPaths = collectApkPaths(appInfo);
             Map<String, LibrarySource> sources = discoverSources(apkPaths);
 
             report.append("=== SOURCE DISCOVERY ===\n");
@@ -115,17 +116,15 @@ public final class BedrockRuntimePreparer {
                         .toString();
             }
 
-            File runtimeRoot = new File(context.getNoBackupFilesDir(), "bedrock-runtime");
-            File profileDirectory = new File(runtimeRoot, BedrockProfile.ID);
+            File profileDirectory = new File(
+                    new File(context.getNoBackupFilesDir(), "bedrock-runtime"),
+                    runtimeId);
             ensureDirectory(profileDirectory);
 
             StatFs statFs = new StatFs(profileDirectory.getAbsolutePath());
             long availableBytes = statFs.getAvailableBytes();
-
             report.append("\n=== STORAGE PLAN ===\n");
-            report.append("Runtime directory: ")
-                    .append(profileDirectory.getAbsolutePath())
-                    .append('\n');
+            report.append("Runtime directory: ").append(profileDirectory.getAbsolutePath()).append('\n');
             report.append("Maximum payload: ").append(formatBytes(requiredBytes)).append('\n');
             report.append("Available space: ").append(formatBytes(availableBytes)).append('\n');
             report.append("Safety margin: ").append(formatBytes(SAFETY_MARGIN_BYTES)).append('\n');
@@ -147,17 +146,10 @@ public final class BedrockRuntimePreparer {
             for (String library : RUNTIME_LIBRARIES) {
                 LibrarySource source = sources.get(library);
                 File destination = new File(profileDirectory, library);
-                PreparedLibrary result = extractAndVerify(
-                        source,
-                        destination,
-                        expectedHashFor(library));
+                PreparedLibrary result = extractAndVerify(source, destination);
                 prepared.add(result);
                 payloadBytes += result.size;
-                if (result.reused) {
-                    reusedCount++;
-                } else {
-                    copiedCount++;
-                }
+                if (result.reused) reusedCount++; else copiedCount++;
 
                 report.append(result.reused ? "[REUSED] " : "[COPIED] ")
                         .append(result.name)
@@ -169,7 +161,7 @@ public final class BedrockRuntimePreparer {
             }
 
             File manifestFile = new File(profileDirectory, "runtime-manifest.txt");
-            writeManifest(manifestFile, packageInfo.versionName, versionCode, prepared);
+            writeManifest(manifestFile, runtimeId, versionName, versionCode, prepared);
 
             boolean allReadable = true;
             for (PreparedLibrary library : prepared) {
@@ -187,13 +179,11 @@ public final class BedrockRuntimePreparer {
             report.append("Verified and reused: ").append(reusedCount).append('\n');
             report.append("Prepared payload: ").append(formatBytes(payloadBytes)).append('\n');
             report.append("Manifest: ").append(manifestFile.getAbsolutePath()).append('\n');
-            report.append("Readability check: ")
-                    .append(allReadable ? "PASS" : "FAIL")
-                    .append('\n');
+            report.append("Readability check: ").append(allReadable ? "PASS" : "FAIL").append('\n');
             report.append("Runtime preparation: ")
-                    .append(allReadable ? "READY FOR STAGE 3.4" : "FAILED")
+                    .append(allReadable ? "READY FOR STAGE 5.1" : "FAILED")
                     .append('\n');
-            report.append("Safety: libraries were copied and hashed, never loaded or executed.");
+            report.append("Safety: libraries came only from the installed Minecraft package and were not loaded on this screen.");
         } catch (PackageManager.NameNotFoundException error) {
             report.append("Runtime preparation: BLOCKED\n")
                     .append("Minecraft Bedrock is not installed.");
@@ -203,16 +193,12 @@ public final class BedrockRuntimePreparer {
                     .append(": ")
                     .append(error.getMessage());
         }
-
         return report.toString();
     }
 
     public static String inspectPrepared(Context context) {
         StringBuilder report = new StringBuilder();
-        File directory = new File(
-                new File(context.getNoBackupFilesDir(), "bedrock-runtime"),
-                BedrockProfile.ID);
-
+        File directory = HostJournal.runtime(context);
         report.append("MATH BEDROCK RUNTIME STATUS\n");
         report.append("Directory: ").append(directory.getAbsolutePath()).append('\n');
 
@@ -220,13 +206,12 @@ public final class BedrockRuntimePreparer {
             return report.append("Prepared runtime: NOT FOUND").toString();
         }
 
-        boolean complete = true;
+        boolean complete = new File(directory, "runtime-manifest.txt").isFile();
         long total = 0L;
         for (String name : RUNTIME_LIBRARIES) {
             File file = new File(directory, name);
             boolean ready = file.isFile() && file.canRead() && file.length() > 0;
-            report.append(ready ? "[READY] " : "[MISSING] ")
-                    .append(name);
+            report.append(ready ? "[READY] " : "[MISSING] ").append(name);
             if (ready) {
                 total += file.length();
                 report.append(" | ").append(formatBytes(file.length()));
@@ -235,7 +220,6 @@ public final class BedrockRuntimePreparer {
             }
             report.append('\n');
         }
-
         report.append("Total payload: ").append(formatBytes(total)).append('\n');
         report.append("Prepared runtime: ").append(complete ? "COMPLETE" : "INCOMPLETE");
         return report.toString();
@@ -245,25 +229,22 @@ public final class BedrockRuntimePreparer {
             throws PackageManager.NameNotFoundException {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return manager.getPackageInfo(
-                    TARGET_PACKAGE,
+                    BedrockProfile.TARGET_PACKAGE,
                     PackageManager.PackageInfoFlags.of(0));
         }
-        return manager.getPackageInfo(TARGET_PACKAGE, 0);
+        return manager.getPackageInfo(BedrockProfile.TARGET_PACKAGE, 0);
     }
 
     private static List<String> collectApkPaths(ApplicationInfo info) {
         List<String> paths = new ArrayList<>();
         if (info.sourceDir != null) paths.add(info.sourceDir);
-        if (info.splitSourceDirs != null) {
-            Collections.addAll(paths, info.splitSourceDirs);
-        }
+        if (info.splitSourceDirs != null) Collections.addAll(paths, info.splitSourceDirs);
         return paths;
     }
 
     private static Map<String, LibrarySource> discoverSources(List<String> apkPaths)
             throws Exception {
         Map<String, LibrarySource> result = new LinkedHashMap<>();
-
         for (String apkPath : apkPaths) {
             try (ZipFile zip = new ZipFile(apkPath)) {
                 Enumeration<? extends ZipEntry> entries = zip.entries();
@@ -272,10 +253,7 @@ public final class BedrockRuntimePreparer {
                     String entryName = entry.getName();
                     if (entry.isDirectory()
                             || !entryName.startsWith(ABI_PREFIX)
-                            || !entryName.endsWith(".so")) {
-                        continue;
-                    }
-
+                            || !entryName.endsWith(".so")) continue;
                     String libraryName = entryName.substring(ABI_PREFIX.length());
                     for (String required : RUNTIME_LIBRARIES) {
                         if (required.equals(libraryName) && !result.containsKey(required)) {
@@ -295,27 +273,7 @@ public final class BedrockRuntimePreparer {
 
     private static PreparedLibrary extractAndVerify(
             LibrarySource source,
-            File destination,
-            String expectedHash) throws Exception {
-        if (expectedHash == null || expectedHash.isEmpty()) {
-            throw new IllegalStateException("No pinned hash for " + destination.getName());
-        }
-
-        if (destination.isFile() && destination.length() == source.size) {
-            String existingHash = sha256(destination);
-            if (expectedHash.equalsIgnoreCase(existingHash)) {
-                destination.setReadable(true, true);
-                destination.setExecutable(true, true);
-                return new PreparedLibrary(
-                        destination.getName(),
-                        destination,
-                        destination.length(),
-                        existingHash,
-                        true,
-                        source.crc);
-            }
-        }
-
+            File destination) throws Exception {
         File temporary = new File(destination.getParentFile(), destination.getName() + ".tmp");
         if (temporary.exists() && !temporary.delete()) {
             throw new IllegalStateException("Cannot remove stale temporary file: " + temporary);
@@ -323,13 +281,9 @@ public final class BedrockRuntimePreparer {
 
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         long written = 0L;
-
         try (ZipFile zip = new ZipFile(source.apkPath)) {
             ZipEntry entry = zip.getEntry(source.entryName);
-            if (entry == null) {
-                throw new IllegalStateException("APK entry disappeared: " + source.entryName);
-            }
-
+            if (entry == null) throw new IllegalStateException("APK entry disappeared: " + source.entryName);
             try (InputStream input = new BufferedInputStream(zip.getInputStream(entry));
                  BufferedOutputStream output = new BufferedOutputStream(
                          new FileOutputStream(temporary), 1024 * 1024)) {
@@ -352,12 +306,15 @@ public final class BedrockRuntimePreparer {
         }
 
         String copiedHash = toHex(digest.digest());
-        if (!expectedHash.equalsIgnoreCase(copiedHash)) {
-            temporary.delete();
-            throw new IllegalStateException(
-                    "SHA-256 mismatch for " + destination.getName()
-                            + ": expected=" + expectedHash
-                            + ", actual=" + copiedHash);
+        if (destination.isFile() && destination.length() == written) {
+            String existingHash = sha256(destination);
+            if (existingHash.equalsIgnoreCase(copiedHash)) {
+                temporary.delete();
+                destination.setReadable(true, true);
+                destination.setExecutable(true, true);
+                return new PreparedLibrary(
+                        destination.getName(), destination, written, copiedHash, true, source.crc);
+            }
         }
 
         if (destination.exists() && !destination.delete()) {
@@ -368,69 +325,32 @@ public final class BedrockRuntimePreparer {
             temporary.delete();
             throw new IllegalStateException("Atomic rename failed for " + destination);
         }
-
         destination.setReadable(true, true);
         destination.setExecutable(true, true);
-
         return new PreparedLibrary(
-                destination.getName(),
-                destination,
-                written,
-                copiedHash,
-                false,
-                source.crc);
-    }
-
-    private static String expectedHashFor(String library) {
-        switch (library) {
-            case "libc++_shared.so":
-                return BedrockProfile.CXX_SHARED_SHA256;
-            case "libmaesdk.so":
-                return BedrockProfile.MAE_SDK_SHA256;
-            case "libHttpClient.Android.so":
-                return BedrockProfile.HTTP_CLIENT_SHA256;
-            case "libPlayFabMultiplayer.so":
-                return BedrockProfile.PLAYFAB_SHA256;
-            case "libfmod.so":
-                return BedrockProfile.FMOD_SHA256;
-            case "libMediaDecoders_Android.so":
-                return BedrockProfile.MEDIA_DECODERS_SHA256;
-            case "libconscrypt_jni.so":
-                return BedrockProfile.CONSCRYPT_SHA256;
-            case "libmcfix.so":
-                return BedrockProfile.SUPPORT_LIBRARY_SHA256;
-            case "libminecraftpe.so":
-                return BedrockProfile.ELF_SHA256;
-            default:
-                return "";
-        }
+                destination.getName(), destination, written, copiedHash, false, source.crc);
     }
 
     private static void writeManifest(
             File manifest,
+            String runtimeId,
             String versionName,
             long versionCode,
             List<PreparedLibrary> libraries) throws Exception {
         StringBuilder value = new StringBuilder();
-        value.append("profile=").append(BedrockProfile.ID).append('\n');
+        value.append("profile=").append(runtimeId).append('\n');
         value.append("versionName=").append(versionName).append('\n');
         value.append("versionCode=").append(versionCode).append('\n');
         value.append("abi=").append(BedrockProfile.ABI).append('\n');
         value.append("graphics=").append(BedrockProfile.GRAPHICS_BACKEND).append('\n');
         value.append("nativeLoadingAttempted=false\n");
-
         for (PreparedLibrary library : libraries) {
             value.append("library=")
-                    .append(library.name)
-                    .append('|')
-                    .append(library.size)
-                    .append('|')
-                    .append(library.sha256)
-                    .append('|')
-                    .append(Long.toHexString(library.sourceCrc))
-                    .append('\n');
+                    .append(library.name).append('|')
+                    .append(library.size).append('|')
+                    .append(library.sha256).append('|')
+                    .append(Long.toHexString(library.sourceCrc)).append('\n');
         }
-
         try (FileOutputStream output = new FileOutputStream(manifest, false)) {
             output.write(value.toString().getBytes(StandardCharsets.UTF_8));
             output.getFD().sync();
@@ -450,18 +370,14 @@ public final class BedrockRuntimePreparer {
         try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
             byte[] buffer = new byte[1024 * 1024];
             int count;
-            while ((count = input.read(buffer)) != -1) {
-                digest.update(buffer, 0, count);
-            }
+            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
         }
         return toHex(digest.digest());
     }
 
     private static String toHex(byte[] value) {
         StringBuilder hex = new StringBuilder(value.length * 2);
-        for (byte item : value) {
-            hex.append(String.format(Locale.ROOT, "%02x", item));
-        }
+        for (byte item : value) hex.append(String.format(Locale.ROOT, "%02x", item));
         return hex.toString();
     }
 
