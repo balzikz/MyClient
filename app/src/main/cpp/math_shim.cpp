@@ -66,6 +66,13 @@ std::string pointer_hex(const void* value) {
     return buffer;
 }
 
+std::string offset_hex(uintptr_t value) {
+    char buffer[32]{};
+    std::snprintf(buffer, sizeof(buffer), "0x%llx",
+                  static_cast<unsigned long long>(value));
+    return buffer;
+}
+
 std::string symbol_description(void* symbol) {
     if (symbol == nullptr) return "MISSING";
 
@@ -78,7 +85,7 @@ std::string symbol_description(void* symbol) {
     const auto base = reinterpret_cast<uintptr_t>(info.dli_fbase);
     return "FOUND address=" + pointer_hex(symbol)
             + " base=" + pointer_hex(info.dli_fbase)
-            + " offset=" + pointer_hex(reinterpret_cast<void*>(address - base))
+            + " offset=" + offset_hex(address - base)
             + " module=" + (info.dli_fname == nullptr ? "UNKNOWN" : info.dli_fname);
 }
 
@@ -183,31 +190,39 @@ std::string bind_minecraft() {
                          + " mode=RTLD_NOW|RTLD_GLOBAL forwarding=DISABLED");
 
     if (path.empty()) {
-        std::lock_guard<std::mutex> lock(g_state_mutex);
-        g_bind_error = "Minecraft path is empty";
-        append_event("BEDROCK_BIND_FAIL", g_bind_error);
+        const std::string error = "Minecraft path is empty";
+        {
+            std::lock_guard<std::mutex> lock(g_state_mutex);
+            g_bind_error = error;
+        }
+        append_event("BEDROCK_BIND_FAIL", error);
         return status_text();
     }
 
     dlerror();
     void* handle = dlopen(path.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle == nullptr) {
-        const char* error = dlerror();
+        const char* raw_error = dlerror();
+        const std::string error = raw_error == nullptr
+                ? "dlopen failed without dlerror"
+                : raw_error;
         {
             std::lock_guard<std::mutex> lock(g_state_mutex);
-            g_bind_error = error == nullptr ? "dlopen failed without dlerror" : error;
+            g_bind_error = error;
         }
-        append_event("BEDROCK_BIND_FAIL", status_text());
+        append_event("BEDROCK_BIND_FAIL", error);
         return status_text();
     }
 
     dlerror();
     void* game_activity_on_create = dlsym(handle, "GameActivity_onCreate");
-    const char* game_symbol_error = dlerror();
+    const char* raw_game_error = dlerror();
+    const std::string game_symbol_error = raw_game_error == nullptr ? "" : raw_game_error;
 
     dlerror();
     void* jni_on_load = dlsym(handle, "JNI_OnLoad");
-    const char* jni_symbol_error = dlerror();
+    const char* raw_jni_error = dlerror();
+    const std::string jni_symbol_error = raw_jni_error == nullptr ? "" : raw_jni_error;
 
     dlerror();
     void* android_main_symbol = dlsym(handle, "android_main");
@@ -227,13 +242,11 @@ std::string bind_minecraft() {
 
     if (game_activity_on_create == nullptr || jni_on_load == nullptr) {
         std::string error = "required symbols missing";
-        if (game_symbol_error != nullptr) {
-            error += " GameActivity_onCreate=";
-            error += game_symbol_error;
+        if (!game_symbol_error.empty()) {
+            error += " GameActivity_onCreate=" + game_symbol_error;
         }
-        if (jni_symbol_error != nullptr) {
-            error += " JNI_OnLoad=";
-            error += jni_symbol_error;
+        if (!jni_symbol_error.empty()) {
+            error += " JNI_OnLoad=" + jni_symbol_error;
         }
         dlclose(handle);
         {
@@ -315,7 +328,7 @@ extern "C" void android_main(android_app* app) {
     g_android_main_entered.store(true);
     append_event("SHIM_ANDROID_MAIN_ENTER",
                  app == nullptr
-                         ? "app=NULL"
+                         ? std::string("app=NULL")
                          : "app=READY bedrock_bound="
                                  + std::string(g_minecraft_bound.load() ? "YES" : "NO")
                                  + " bedrock_forwarding=DISABLED");
