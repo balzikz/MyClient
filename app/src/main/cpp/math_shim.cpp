@@ -1,31 +1,32 @@
 #include <android/log.h>
-#include <android/looper.h>
-#include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <game-activity/GameActivity.h>
 #include <jni.h>
 
 #include <atomic>
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <mutex>
 #include <string>
-#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
 
+extern "C" bool math_bedrock_jni_ready();
+extern "C" jint math_bedrock_jni_version();
+
 namespace {
 
 constexpr const char* kTag = "MATH-SHIM";
-constexpr const char* kStage = "4.1.0";
+constexpr const char* kStage = "4.3.0";
 
 std::mutex g_state_mutex;
 std::string g_journal_path;
 std::string g_minecraft_path;
 std::string g_bind_error;
+std::string g_forward_error;
 void* g_minecraft_handle = nullptr;
 void* g_minecraft_game_activity_on_create = nullptr;
 void* g_minecraft_jni_on_load = nullptr;
@@ -34,8 +35,10 @@ void* g_minecraft_native_activity_on_create = nullptr;
 std::atomic<bool> g_configured{false};
 std::atomic<bool> g_bind_attempted{false};
 std::atomic<bool> g_minecraft_bound{false};
-std::atomic<bool> g_android_main_entered{false};
-std::atomic<int32_t> g_last_app_command{-1};
+std::atomic<bool> g_forward_started{false};
+std::atomic<bool> g_forward_returned{false};
+std::atomic<bool> g_forward_failed{false};
+std::atomic<uintptr_t> g_activity_address{0};
 
 long long now_millis() {
     timespec value{};
@@ -66,10 +69,18 @@ std::string pointer_hex(const void* value) {
     return buffer;
 }
 
-std::string offset_hex(uintptr_t value) {
+std::string integer_hex(uintptr_t value) {
     char buffer[32]{};
     std::snprintf(buffer, sizeof(buffer), "0x%llx",
                   static_cast<unsigned long long>(value));
+    return buffer;
+}
+
+std::string jni_version_text() {
+    const jint version = math_bedrock_jni_version();
+    char buffer[32]{};
+    std::snprintf(buffer, sizeof(buffer), "0x%08x",
+                  static_cast<unsigned int>(version));
     return buffer;
 }
 
@@ -85,7 +96,7 @@ std::string symbol_description(void* symbol) {
     const auto base = reinterpret_cast<uintptr_t>(info.dli_fbase);
     return "FOUND address=" + pointer_hex(symbol)
             + " base=" + pointer_hex(info.dli_fbase)
-            + " offset=" + offset_hex(address - base)
+            + " offset=" + integer_hex(address - base)
             + " module=" + (info.dli_fname == nullptr ? "UNKNOWN" : info.dli_fname);
 }
 
@@ -138,15 +149,45 @@ std::string from_java_string(JNIEnv* environment, jstring value) {
     return result;
 }
 
-void on_app_command(android_app*, int32_t command) {
-    const int32_t previous = g_last_app_command.exchange(command, std::memory_order_relaxed);
-    if (command == 20 && previous == 20) return;
-    append_event("SHIM_APP_COMMAND", "command=" + std::to_string(command));
+std::string forward_state() {
+    if (g_forward_failed.load()) return "FAILED";
+    if (g_forward_returned.load()) return "RETURNED";
+    if (g_forward_started.load()) return "IN_PROGRESS";
+    return "NOT_STARTED";
+}
+
+std::string callback_summary(const GameActivity* activity) {
+    if (activity == nullptr) return "activity=NULL";
+    if (activity->callbacks == nullptr) return "callbacks=NULL";
+
+    const GameActivityCallbacks* callbacks = activity->callbacks;
+    int count = 0;
+    count += callbacks->onStart != nullptr;
+    count += callbacks->onResume != nullptr;
+    count += callbacks->onPause != nullptr;
+    count += callbacks->onStop != nullptr;
+    count += callbacks->onDestroy != nullptr;
+    count += callbacks->onWindowFocusChanged != nullptr;
+    count += callbacks->onNativeWindowCreated != nullptr;
+    count += callbacks->onNativeWindowResized != nullptr;
+    count += callbacks->onNativeWindowRedrawNeeded != nullptr;
+    count += callbacks->onNativeWindowDestroyed != nullptr;
+    count += callbacks->onTouchEvent != nullptr;
+    count += callbacks->onKeyDown != nullptr;
+    count += callbacks->onKeyUp != nullptr;
+    count += callbacks->onTextInputEvent != nullptr;
+
+    return "callbacks_non_null=" + std::to_string(count)
+            + " start=" + (callbacks->onStart == nullptr ? "NO" : "YES")
+            + " resume=" + (callbacks->onResume == nullptr ? "NO" : "YES")
+            + " window=" + (callbacks->onNativeWindowCreated == nullptr ? "NO" : "YES")
+            + " touch=" + (callbacks->onTouchEvent == nullptr ? "NO" : "YES");
 }
 
 std::string status_text() {
     std::string minecraft_path;
     std::string bind_error;
+    std::string forward_error;
     void* handle = nullptr;
     void* game_activity_on_create = nullptr;
     void* jni_on_load = nullptr;
@@ -154,6 +195,7 @@ std::string status_text() {
         std::lock_guard<std::mutex> lock(g_state_mutex);
         minecraft_path = g_minecraft_path;
         bind_error = g_bind_error;
+        forward_error = g_forward_error;
         handle = g_minecraft_handle;
         game_activity_on_create = g_minecraft_game_activity_on_create;
         jni_on_load = g_minecraft_jni_on_load;
@@ -161,18 +203,22 @@ std::string status_text() {
 
     return std::string("stage=") + kStage
             + " configured=" + (g_configured.load() ? "YES" : "NO")
-            + " bind_attempted=" + (g_bind_attempted.load() ? "YES" : "NO")
             + " bind=" + (g_minecraft_bound.load() ? "READY" : "NOT_READY")
             + " handle=" + (handle == nullptr ? "MISSING" : "READY")
             + " GameActivity_onCreate="
             + (game_activity_on_create == nullptr ? "MISSING" : "FOUND")
-            + " JNI_OnLoad=" + (jni_on_load == nullptr ? "MISSING" : "FOUND_NOT_CALLED")
-            + " android_main=" + (g_android_main_entered.load() ? "ENTERED" : "NOT_ENTERED")
-            + " last_command=" + std::to_string(g_last_app_command.load())
+            + " JNI_OnLoad="
+            + (jni_on_load == nullptr
+               ? "MISSING"
+               : (math_bedrock_jni_ready() ? "CALLED_READY" : "FOUND_NOT_READY"))
+            + " jni_version=" + jni_version_text()
+            + " forwarding=" + forward_state()
+            + " activity=" + integer_hex(g_activity_address.load())
             + " minecraft_path=" + (minecraft_path.empty() ? "MISSING" : "CONFIGURED")
             + " bedrock_loaded=" + (g_minecraft_bound.load() ? "YES" : "NO")
-            + " bedrock_started=NO"
-            + (bind_error.empty() ? "" : " error=" + clean(bind_error));
+            + " bedrock_started=" + (g_forward_returned.load() ? "YES" : "NO")
+            + (bind_error.empty() ? "" : " bind_error=" + clean(bind_error))
+            + (forward_error.empty() ? "" : " forward_error=" + clean(forward_error));
 }
 
 std::string bind_minecraft() {
@@ -187,7 +233,7 @@ std::string bind_minecraft() {
     g_bind_attempted.store(true);
     append_event("BEDROCK_BIND_START",
                  "path=" + (path.empty() ? std::string("MISSING") : path)
-                         + " mode=RTLD_NOW|RTLD_GLOBAL forwarding=DISABLED");
+                         + " mode=RTLD_NOW|RTLD_GLOBAL forwarding=ARMED");
 
     if (path.empty()) {
         const std::string error = "Minecraft path is empty";
@@ -242,12 +288,8 @@ std::string bind_minecraft() {
 
     if (game_activity_on_create == nullptr || jni_on_load == nullptr) {
         std::string error = "required symbols missing";
-        if (!game_symbol_error.empty()) {
-            error += " GameActivity_onCreate=" + game_symbol_error;
-        }
-        if (!jni_symbol_error.empty()) {
-            error += " JNI_OnLoad=" + jni_symbol_error;
-        }
+        if (!game_symbol_error.empty()) error += " GameActivity_onCreate=" + game_symbol_error;
+        if (!jni_symbol_error.empty()) error += " JNI_OnLoad=" + jni_symbol_error;
         dlclose(handle);
         {
             std::lock_guard<std::mutex> lock(g_state_mutex);
@@ -270,10 +312,17 @@ std::string bind_minecraft() {
 
     append_event("BEDROCK_BIND_OK",
                  "handle=" + pointer_hex(handle)
-                         + " required=2/2"
-                         + " JNI_OnLoad=FOUND_NOT_CALLED"
-                         + " forwarding=DISABLED bedrock_started=NO");
+                         + " required=2/2 forwarding=ARMED bedrock_started=NO");
     return status_text();
+}
+
+void set_forward_failure(const std::string& error) {
+    {
+        std::lock_guard<std::mutex> lock(g_state_mutex);
+        g_forward_error = error;
+    }
+    g_forward_failed.store(true);
+    append_event("BEDROCK_GAMEACTIVITY_FORWARD_FAIL", error);
 }
 
 }  // namespace
@@ -292,6 +341,7 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeConfigure(
         g_journal_path = journal;
         g_minecraft_path = minecraft;
         g_bind_error.clear();
+        g_forward_error.clear();
     }
     g_configured.store(!journal.empty() && !minecraft.empty());
 
@@ -299,7 +349,7 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeConfigure(
                  std::string("stage=") + kStage
                          + " journal=" + (journal.empty() ? "MISSING" : "READY")
                          + " minecraft=" + (minecraft.empty() ? "MISSING" : "READY")
-                         + " bedrock_loaded=NO");
+                         + " forwarding=NOT_STARTED");
 
     const std::string result = status_text();
     return environment->NewStringUTF(result.c_str());
@@ -318,44 +368,71 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeIsMinecraftBound(JNIEnv*, jclas
     return g_minecraft_bound.load() ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_balzikz_mathclient_MathShimBridge_nativeIsBedrockForwarded(JNIEnv*, jclass) {
+    return g_forward_returned.load() && !g_forward_failed.load() ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_balzikz_mathclient_MathShimBridge_nativeStatus(JNIEnv* environment, jclass) {
     const std::string result = status_text();
     return environment->NewStringUTF(result.c_str());
 }
 
-extern "C" void android_main(android_app* app) {
-    g_android_main_entered.store(true);
-    append_event("SHIM_ANDROID_MAIN_ENTER",
-                 app == nullptr
-                         ? std::string("app=NULL")
-                         : "app=READY bedrock_bound="
-                                 + std::string(g_minecraft_bound.load() ? "YES" : "NO")
-                                 + " bedrock_forwarding=DISABLED");
+extern "C" JNIEXPORT void GameActivity_onCreate(
+        GameActivity* activity,
+        void* saved_state,
+        size_t saved_state_size) {
+    g_forward_started.store(true);
+    g_activity_address.store(reinterpret_cast<uintptr_t>(activity));
 
-    if (app == nullptr) {
-        append_event("SHIM_ANDROID_MAIN_EXIT", "reason=NULL_APP");
+    void* target = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_state_mutex);
+        target = g_minecraft_game_activity_on_create;
+    }
+
+    append_event("BEDROCK_GAMEACTIVITY_FORWARD_START",
+                 "activity=" + pointer_hex(activity)
+                         + " saved_state_bytes=" + std::to_string(saved_state_size)
+                         + " target=" + pointer_hex(target)
+                         + " jni_ready=" + (math_bedrock_jni_ready() ? "YES" : "NO")
+                         + " instance_before="
+                         + pointer_hex(activity == nullptr ? nullptr : activity->instance));
+
+    if (activity == nullptr) {
+        set_forward_failure("GameActivity pointer is null");
+        return;
+    }
+    if (!g_minecraft_bound.load() || target == nullptr) {
+        set_forward_failure("Bedrock GameActivity_onCreate is not bound");
+        return;
+    }
+    if (!math_bedrock_jni_ready()) {
+        set_forward_failure("Bedrock JNI_OnLoad is not ready");
         return;
     }
 
-    app->onAppCmd = on_app_command;
+    using BedrockCreateFunction = void (*)(GameActivity*, void*, size_t);
+    auto bedrock_create = reinterpret_cast<BedrockCreateFunction>(target);
 
-    while (app->destroyRequested == 0) {
-        int events = 0;
-        android_poll_source* source = nullptr;
-        const int result = ALooper_pollOnce(
-                -1,
-                nullptr,
-                &events,
-                reinterpret_cast<void**>(&source));
+    bedrock_create(activity, saved_state, saved_state_size);
 
-        if (result == ALOOPER_POLL_ERROR) {
-            append_event("SHIM_LOOP_ERROR", "ALooper_pollOnce returned error");
-            break;
-        }
-        if (source != nullptr) source->process(app, source);
+    const bool has_instance = activity->instance != nullptr;
+    const bool has_callbacks = activity->callbacks != nullptr
+            && (activity->callbacks->onStart != nullptr
+                || activity->callbacks->onResume != nullptr
+                || activity->callbacks->onNativeWindowCreated != nullptr);
+
+    if (!has_instance && !has_callbacks) {
+        set_forward_failure("Bedrock returned without instance or core callbacks");
+        return;
     }
 
-    append_event("SHIM_ANDROID_MAIN_EXIT", "destroyRequested=YES");
-    g_android_main_entered.store(false);
+    g_forward_returned.store(true);
+    append_event("BEDROCK_GAMEACTIVITY_FORWARD_RETURN",
+                 "activity=" + pointer_hex(activity)
+                         + " instance_after=" + pointer_hex(activity->instance)
+                         + " " + callback_summary(activity)
+                         + " bedrock_started=YES");
 }
