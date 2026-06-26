@@ -11,6 +11,7 @@ import com.balzikz.mathclient.HostJournal;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -185,9 +186,7 @@ public final class GamePackageManager {
                 + "lastUpdate=" + gamePackageInfo.lastUpdateTime + "\n"
                 + "abi=" + ABI + "\n"
                 + "sources=" + String.join("|", apkContainers()) + "\n";
-        String actual = marker.isFile()
-                ? Files.readString(marker.toPath(), StandardCharsets.UTF_8)
-                : "";
+        String actual = marker.isFile() ? readText(marker) : "";
         if (!expected.equals(actual)) {
             File[] children = runtimeDirectory.listFiles();
             if (children != null) {
@@ -197,7 +196,7 @@ public final class GamePackageManager {
                     }
                 }
             }
-            Files.writeString(marker.toPath(), expected, StandardCharsets.UTF_8);
+            writeText(marker, expected);
             HostJournal.write(launcherContext, "CACHE_REFRESH", "Minecraft fingerprint changed");
         } else {
             HostJournal.write(launcherContext, "CACHE_REUSE", "fingerprint MATCH");
@@ -297,8 +296,24 @@ public final class GamePackageManager {
             File file = libraryFile(name);
             text.append(name).append(" sha256=").append(sha256(file)).append('\n');
         }
-        Files.writeString(new File(runtimeDirectory, "runtime-manifest.txt").toPath(),
-                text.toString(), StandardCharsets.UTF_8);
+        writeText(new File(runtimeDirectory, "runtime-manifest.txt"), text.toString());
+    }
+
+    private static String readText(File file) throws Exception {
+        try (InputStream input = new BufferedInputStream(new FileInputStream(file));
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[16 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return new String(output.toByteArray(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static void writeText(File file, String value) throws Exception {
+        try (FileOutputStream output = new FileOutputStream(file, false)) {
+            output.write(value.getBytes(StandardCharsets.UTF_8));
+            output.flush();
+        }
     }
 
     private static String sha256(File file) throws Exception {
