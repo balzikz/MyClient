@@ -18,5 +18,9 @@ public final class MathShimBridge {
 
     public static native String nativeConfigure(String journalPath, String minecraftPath);
 
+    public static native String nativeBindMinecraft();
+
+    public static native boolean nativeIsMinecraftBound();
+
     public static native String nativeStatus();
 }
