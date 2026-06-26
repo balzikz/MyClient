@@ -9,13 +9,14 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 public final class MathShimLabActivity extends Activity {
-    private static final int CREATE_DIAGNOSTICS_FILE = 4200;
+    private static final int CREATE_DIAGNOSTICS_FILE = 5100;
     private TextView report;
 
     @Override
@@ -36,10 +37,15 @@ public final class MathShimLabActivity extends Activity {
         report.setTextIsSelectable(true);
         root.addView(report);
 
-        Button launch = button("ЗАПУСТИТЬ STAGE 5.0.1 NATIVE HANDOFF");
+        Button launch = button("ЗАПУСТИТЬ STAGE 5.1 NATIVE HANDOFF");
         launch.setOnClickListener(view -> {
+            if (!InstalledRuntimePreparer.isReady(getApplicationContext())) {
+                Toast.makeText(this, "Stage 5.1 runtime не готов", Toast.LENGTH_LONG).show();
+                refresh();
+                return;
+            }
             HostJournal.reset(this);
-            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting RuntimeHostActivity stage=5.0.1");
+            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting RuntimeHostActivity stage=5.1");
             startActivity(new Intent(this, RuntimeHostActivity.class));
         });
         root.addView(launch);
@@ -87,13 +93,14 @@ public final class MathShimLabActivity extends Activity {
         File minecraft = HostJournal.game(this);
         File shim = new File(getApplicationInfo().nativeLibraryDir, "libmathshim.so");
 
-        return "MATH CLIENT STAGE 5.0.1\n"
-                + "Architecture: JVM System.load -> RTLD_NOLOAD -> single native entrypoint owner\n\n"
+        return "MATH CLIENT STAGE 5.1\n"
+                + "Architecture: installed 1.26.30.x -> JVM System.load -> RTLD_NOLOAD -> NativeActivity handoff\n\n"
+                + InstalledRuntimePreparer.inspect(getApplicationContext()) + "\n\n"
                 + "Shim packaged: " + describe(shim) + "\n"
                 + "Runtime directory: " + describe(runtime) + "\n"
                 + "Minecraft library: " + describe(minecraft) + "\n"
                 + "Connection state: " + safeConnectionStatus() + "\n\n"
-                + "=== STAGE 5.0.1 HOST JOURNAL ===\n"
+                + "=== STAGE 5.1 HOST JOURNAL ===\n"
                 + HostJournal.read(this)
                 + "\n=== SIGNAL TRACE ===\n"
                 + HostJournal.readSignalTrace(this);
@@ -118,7 +125,7 @@ public final class MathShimLabActivity extends Activity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TITLE,
-                "math-stage501-diagnostics-" + System.currentTimeMillis() + ".txt");
+                "math-stage51-diagnostics-" + System.currentTimeMillis() + ".txt");
         startActivityForResult(intent, CREATE_DIAGNOSTICS_FILE);
     }
 

@@ -17,21 +17,31 @@ public final class MathApplication extends Application {
         if (!process.endsWith(":game_host")) return;
 
         installCrashJournal();
-        HostJournal.write(this, "APPLICATION_START", process + " stage=5.0.1");
+        HostJournal.write(this, "APPLICATION_START", process + " stage=5.1.0");
         LinkerBridge.setSignalMarker("APPLICATION_START");
         String signalInstall = LinkerBridge.installSignalTrace(
                 HostJournal.signalTrace(this).getAbsolutePath());
         HostJournal.write(this, "SIGNAL_TRACE_INSTALL", signalInstall);
 
         try {
+            BedrockProfile.Installed installed = BedrockProfile.installed(this);
+            HostJournal.write(this, "INSTALLED_VERSION",
+                    "versionName=" + installed.versionName
+                            + " versionCode=" + installed.versionCode
+                            + " supported=" + installed.supported);
+            if (!installed.supported) {
+                throw new IllegalStateException(
+                        "Unsupported Minecraft version " + installed.versionName);
+            }
+
             File runtime = HostJournal.runtime(this);
             File manifest = new File(runtime, "runtime-manifest.txt");
             File game = HostJournal.game(this);
             if (!runtime.isDirectory() || !manifest.isFile() || !game.isFile()) {
-                throw new IllegalStateException("Bedrock runtime is missing");
+                throw new IllegalStateException("Stage 5.1 runtime is missing");
             }
 
-            LinkerBridge.setSignalMarker("PREPARE_STAGE_5_0_1_RUNTIME");
+            LinkerBridge.setSignalMarker("PREPARE_STAGE_5_1_RUNTIME");
             String preload = LinkerBridge.prepareMinecraftHost(runtime.getAbsolutePath());
             if (!preload.contains("Verdict: READY FOR SYSTEM LOAD")) {
                 throw new IllegalStateException(preload);
@@ -69,7 +79,8 @@ public final class MathApplication extends Application {
             }
 
             hostReady = true;
-            hostStatus = "jvmLoad=" + loadStatus
+            hostStatus = "version=" + installed.versionName
+                    + " | jvmLoad=" + loadStatus
                     + " | connection=" + connectionStatus
                     + " | shim=" + shimStatus;
             LinkerBridge.setSignalMarker("BEDROCK_ENTRYPOINTS_READY");
