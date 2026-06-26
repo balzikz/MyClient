@@ -15,7 +15,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 public final class MathShimLabActivity extends Activity {
-    private static final int CREATE_DIAGNOSTICS_FILE = 4000;
+    private static final int CREATE_DIAGNOSTICS_FILE = 4100;
     private TextView report;
 
     @Override
@@ -36,10 +36,10 @@ public final class MathShimLabActivity extends Activity {
         report.setTextIsSelectable(true);
         root.addView(report);
 
-        Button launch = button("ЗАПУСТИТЬ STAGE 4.0 MATH SHIM");
+        Button launch = button("ЗАПУСТИТЬ STAGE 4.1 BEDROCK BIND");
         launch.setOnClickListener(view -> {
             HostJournal.reset(this);
-            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting Stage 4 GameHostActivity");
+            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting Stage 4.1 GameHostActivity");
             startActivity(new Intent(this, GameHostActivity.class));
         });
         root.addView(launch);
@@ -87,13 +87,15 @@ public final class MathShimLabActivity extends Activity {
         File minecraft = HostJournal.game(this);
         File shim = new File(getApplicationInfo().nativeLibraryDir, "libmathshim.so");
 
-        return "MATH CLIENT STAGE 4.0\n"
-                + "Architecture: GameActivity -> libmathshim.so -> future Bedrock forwarding\n\n"
+        return "MATH CLIENT STAGE 4.1\n"
+                + "Architecture: GameActivity -> libmathshim.so -> bound Bedrock ELF\n\n"
                 + "Shim packaged: " + describe(shim) + "\n"
                 + "Runtime directory: " + describe(runtime) + "\n"
                 + "Minecraft library: " + describe(minecraft) + "\n"
-                + "Bedrock forwarding: DISABLED IN 4.0.0\n\n"
-                + "=== STAGE 4 HOST JOURNAL ===\n"
+                + "Required exports: GameActivity_onCreate + JNI_OnLoad\n"
+                + "JNI_OnLoad execution: DISABLED IN 4.1\n"
+                + "Bedrock forwarding: DISABLED IN 4.1\n\n"
+                + "=== STAGE 4.1 HOST JOURNAL ===\n"
                 + HostJournal.read(this)
                 + "\n=== SIGNAL TRACE ===\n"
                 + HostJournal.readSignalTrace(this);
@@ -110,7 +112,7 @@ public final class MathShimLabActivity extends Activity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TITLE,
-                "math-stage400-diagnostics-" + System.currentTimeMillis() + ".txt");
+                "math-stage410-diagnostics-" + System.currentTimeMillis() + ".txt");
         startActivityForResult(intent, CREATE_DIAGNOSTICS_FILE);
     }
 

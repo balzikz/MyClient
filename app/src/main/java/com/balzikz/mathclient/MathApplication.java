@@ -17,7 +17,7 @@ public final class MathApplication extends Application {
         if (!process.endsWith(":game_host")) return;
 
         installCrashJournal();
-        HostJournal.write(this, "APPLICATION_START", process + " stage=4.0.0");
+        HostJournal.write(this, "APPLICATION_START", process + " stage=4.1.0");
         LinkerBridge.setSignalMarker("APPLICATION_START");
         String signalInstall = LinkerBridge.installSignalTrace(
                 HostJournal.signalTrace(this).getAbsolutePath());
@@ -31,7 +31,7 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException("Bedrock runtime is missing");
             }
 
-            LinkerBridge.setSignalMarker("PREPARE_STAGE_4_RUNTIME");
+            LinkerBridge.setSignalMarker("PREPARE_STAGE_4_1_RUNTIME");
             String preload = LinkerBridge.prepareMinecraftHost(runtime.getAbsolutePath());
             if (!preload.contains("Verdict: READY FOR SYSTEM LOAD")) {
                 throw new IllegalStateException(preload);
@@ -40,9 +40,19 @@ public final class MathApplication extends Application {
 
             LinkerBridge.setSignalMarker("CONFIGURE_MATH_SHIM");
             String shimStatus = MathShimBridge.configure(this);
+            HostJournal.write(this, "MATH_SHIM_CONFIGURED", shimStatus);
+
+            LinkerBridge.setSignalMarker("BIND_BEDROCK_ELF");
+            String bindStatus = MathShimBridge.nativeBindMinecraft();
+            HostJournal.write(this, "BEDROCK_BIND_RESULT", bindStatus);
+            if (!MathShimBridge.nativeIsMinecraftBound()) {
+                throw new IllegalStateException(bindStatus);
+            }
+
             hostReady = true;
-            hostStatus = shimStatus;
-            HostJournal.write(this, "MATH_SHIM_READY", shimStatus);
+            hostStatus = bindStatus;
+            LinkerBridge.setSignalMarker("BEDROCK_BOUND_READY");
+            HostJournal.write(this, "MATH_SHIM_READY", bindStatus);
         } catch (Throwable error) {
             hostReady = false;
             hostStatus = describe(error);
