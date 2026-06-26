@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, stage-4.0-math-shim, stage-4.1-bedrock-bind, stage-4.2-bedrock-jni, stage-4.3-gameactivity-forward ]
+    branches: [ main, stage-4.0-math-shim, stage-4.1-bedrock-bind, stage-4.2-bedrock-jni, stage-4.3-gameactivity-forward, stage-4.3.1-mainactivity-owner ]
   pull_request:
   workflow_dispatch:
 
@@ -44,11 +44,11 @@ jobs:
           gradle :app:assembleDebug --stacktrace > stage4-build.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
-            echo "===== STAGE 4.3 BUILD FAILURE TAIL ====="
+            echo "===== STAGE 4.3.1 BUILD FAILURE TAIL ====="
             tail -n 250 stage4-build.log
             exit "$status"
           fi
-          echo "Stage 4.3 Gradle build completed successfully."
+          echo "Stage 4.3.1 Gradle build completed successfully."
 
       - name: Upload Stage 4 build log on failure
         if: failure()
@@ -58,9 +58,11 @@ jobs:
           path: stage4-build.log
           if-no-files-found: error
 
-      - name: Verify native forwarding exports and signature
+      - name: Verify Mojang Java host, native forwarding and signature
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
+          grep -F "public final class GameHostActivity extends MainActivity" app/src/main/java/com/balzikz/mathclient/GameHostActivity.java
+          grep -F "import com.mojang.minecraftpe.MainActivity;" app/src/main/java/com/balzikz/mathclient/GameHostActivity.java
           unzip -l "$APK" | grep "lib/arm64-v8a/libmathclient.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libmathlinker.so"
           unzip -l "$APK" | grep "lib/arm64-v8a/libmathshim.so"
@@ -72,11 +74,14 @@ jobs:
           "$READELF" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep " GameActivity_onCreate"
           "$READELF" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep "MathShimBridge_nativeIsBedrockForwarded"
           "$READELF" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep "MathShimBridge_nativeInitializeMinecraftJni"
+          for dex in $(zipinfo -1 "$APK" | grep '^classes.*\.dex$'); do
+            unzip -p "$APK" "$dex" | strings
+          done | grep -F "Lcom/mojang/minecraftpe/MainActivity;"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: math-client-stage-4.3-gameactivity-forward-debug
+          name: math-client-stage-4.3.1-mainactivity-owner-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
