@@ -33,7 +33,7 @@ void register_activity(JNIEnv* env, jobject, jobject activity) {
                         g_activity == nullptr ? "NO" : "YES");
 }
 
-constexpr JNINativeMethod kMethods[] = {
+JNINativeMethod kMethods[] = {
         {const_cast<char*>("nativeConfigureClientLogger"),
          const_cast<char*>("(Ljava/lang/String;)V"),
          reinterpret_cast<void*>(configure_client_logger)},
