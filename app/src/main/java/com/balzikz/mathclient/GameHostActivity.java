@@ -33,7 +33,7 @@ public final class GameHostActivity extends GameActivity {
 
     @Override
     protected void onCreate(Bundle state) {
-        marker("BEFORE_SHIM_GAMEACTIVITY_ONCREATE");
+        marker("BEFORE_BEDROCK_GAMEACTIVITY_FORWARD");
         if (!MathApplication.isHostReady()) {
             HostJournal.write(this, "HOST_NOT_READY", MathApplication.hostStatus());
             throw new IllegalStateException(MathApplication.hostStatus());
@@ -41,13 +41,20 @@ public final class GameHostActivity extends GameActivity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
                 | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        HostJournal.write(this, "BEFORE_SHIM_GAMEACTIVITY_ONCREATE",
+        HostJournal.write(this, "BEFORE_BEDROCK_GAMEACTIVITY_FORWARD",
                 MathShimBridge.nativeStatus());
+
         super.onCreate(state);
-        marker("AFTER_SHIM_GAMEACTIVITY_ONCREATE");
+
+        marker("AFTER_BEDROCK_GAMEACTIVITY_FORWARD");
+        if (!MathShimBridge.nativeIsBedrockForwarded()) {
+            String status = MathShimBridge.nativeStatus();
+            HostJournal.write(this, "BEDROCK_GAMEACTIVITY_NOT_CONFIRMED", status);
+            throw new IllegalStateException(status);
+        }
 
         SurfaceView surface = mSurfaceView;
-        HostJournal.write(this, "AFTER_SHIM_GAMEACTIVITY_ONCREATE",
+        HostJournal.write(this, "BEDROCK_GAMEACTIVITY_FORWARD_CONFIRMED",
                 "nativeHandle=" + getGameActivityNativeHandle()
                         + " surface=" + (surface == null
                         ? "NULL"
@@ -62,88 +69,88 @@ public final class GameHostActivity extends GameActivity {
 
     @Override
     protected void onStart() {
-        marker("BEFORE_ONSTART");
+        marker("BEFORE_BEDROCK_ONSTART");
         HostJournal.write(this, "BEFORE_ONSTART", MathShimBridge.nativeStatus());
         super.onStart();
-        marker("AFTER_ONSTART");
+        marker("AFTER_BEDROCK_ONSTART");
         HostJournal.write(this, "AFTER_ONSTART", MathShimBridge.nativeStatus());
     }
 
     @Override
     protected void onResume() {
-        marker("BEFORE_ONRESUME");
+        marker("BEFORE_BEDROCK_ONRESUME");
         HostJournal.write(this, "BEFORE_ONRESUME", MathShimBridge.nativeStatus());
         super.onResume();
-        marker("AFTER_ONRESUME");
+        marker("AFTER_BEDROCK_ONRESUME");
         HostJournal.write(this, "AFTER_ONRESUME", MathShimBridge.nativeStatus());
     }
 
     @Override
     protected void onPause() {
-        marker("BEFORE_ONPAUSE");
+        marker("BEFORE_BEDROCK_ONPAUSE");
         HostJournal.write(this, "BEFORE_ONPAUSE", MathShimBridge.nativeStatus());
         super.onPause();
-        marker("AFTER_ONPAUSE");
+        marker("AFTER_BEDROCK_ONPAUSE");
         HostJournal.write(this, "AFTER_ONPAUSE", MathShimBridge.nativeStatus());
     }
 
     @Override
     protected void onStop() {
-        marker("BEFORE_ONSTOP");
+        marker("BEFORE_BEDROCK_ONSTOP");
         HostJournal.write(this, "BEFORE_ONSTOP", MathShimBridge.nativeStatus());
         super.onStop();
-        marker("AFTER_ONSTOP");
+        marker("AFTER_BEDROCK_ONSTOP");
         HostJournal.write(this, "AFTER_ONSTOP", MathShimBridge.nativeStatus());
     }
 
     @Override
     protected void onDestroy() {
-        marker("BEFORE_ONDESTROY");
+        marker("BEFORE_BEDROCK_ONDESTROY");
         HostJournal.write(this, "BEFORE_ONDESTROY", MathShimBridge.nativeStatus());
         super.onDestroy();
-        marker("AFTER_ONDESTROY");
+        marker("AFTER_BEDROCK_ONDESTROY");
         HostJournal.write(this, "AFTER_ONDESTROY", MathShimBridge.nativeStatus());
     }
 
     @Override
     public void onWindowFocusChanged(boolean focused) {
-        marker("BEFORE_WINDOW_FOCUS_" + focused);
+        marker("BEFORE_BEDROCK_WINDOW_FOCUS_" + focused);
         super.onWindowFocusChanged(focused);
-        marker("AFTER_WINDOW_FOCUS_" + focused);
+        marker("AFTER_BEDROCK_WINDOW_FOCUS_" + focused);
         HostJournal.write(this, "WINDOW_FOCUS", focused + " " + MathShimBridge.nativeStatus());
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        marker("BEFORE_SURFACE_CREATED");
+        marker("BEFORE_BEDROCK_SURFACE_CREATED");
         super.surfaceCreated(holder);
-        marker("AFTER_SURFACE_CREATED");
+        marker("AFTER_BEDROCK_SURFACE_CREATED");
         HostJournal.write(this, "SURFACE_CREATED",
                 "valid=" + holder.getSurface().isValid() + " " + MathShimBridge.nativeStatus());
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        marker("BEFORE_SURFACE_CHANGED");
+        marker("BEFORE_BEDROCK_SURFACE_CHANGED");
         super.surfaceChanged(holder, format, width, height);
-        marker("AFTER_SURFACE_CHANGED");
+        marker("AFTER_BEDROCK_SURFACE_CHANGED");
         HostJournal.write(this, "SURFACE_CHANGED",
                 width + "x" + height + " format=" + format + " " + MathShimBridge.nativeStatus());
     }
 
     @Override
     public void surfaceRedrawNeeded(SurfaceHolder holder) {
-        marker("BEFORE_SURFACE_REDRAW");
+        marker("BEFORE_BEDROCK_SURFACE_REDRAW");
         super.surfaceRedrawNeeded(holder);
-        marker("AFTER_SURFACE_REDRAW");
+        marker("AFTER_BEDROCK_SURFACE_REDRAW");
         HostJournal.write(this, "SURFACE_REDRAW", MathShimBridge.nativeStatus());
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        marker("BEFORE_SURFACE_DESTROYED");
+        marker("BEFORE_BEDROCK_SURFACE_DESTROYED");
         super.surfaceDestroyed(holder);
-        marker("AFTER_SURFACE_DESTROYED");
+        marker("AFTER_BEDROCK_SURFACE_DESTROYED");
         HostJournal.write(this, "SURFACE_DESTROYED", MathShimBridge.nativeStatus());
     }
 
