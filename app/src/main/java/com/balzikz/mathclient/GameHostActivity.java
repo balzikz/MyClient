@@ -8,9 +8,9 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
 
-import com.google.androidgamesdk.GameActivity;
+import com.mojang.minecraftpe.MainActivity;
 
-public final class GameHostActivity extends GameActivity {
+public final class GameHostActivity extends MainActivity {
     private AssetManager targetAssets;
 
     @Override
@@ -38,6 +38,10 @@ public final class GameHostActivity extends GameActivity {
             HostJournal.write(this, "HOST_NOT_READY", MathApplication.hostStatus());
             throw new IllegalStateException(MathApplication.hostStatus());
         }
+
+        HostJournal.write(this, "JAVA_HOST_CLASS",
+                "actual=" + getClass().getName()
+                        + " mojangMainActivity=" + (this instanceof MainActivity));
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
                 | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
