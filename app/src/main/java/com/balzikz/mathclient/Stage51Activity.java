@@ -63,9 +63,9 @@ public final class Stage51Activity extends Activity {
         root.addView(refresh);
 
         Button diagnostics = new Button(this);
-        diagnostics.setText("ОТКРЫТЬ ПОЛНУЮ ДИАГНОСТИКУ");
+        diagnostics.setText("ОТКРЫТЬ ДИАГНОСТИКУ STAGE 5.1");
         diagnostics.setOnClickListener(view ->
-                startActivity(new Intent(this, MinecraftGameHostLabActivity.class)));
+                startActivity(new Intent(this, MathShimLabActivity.class)));
         root.addView(diagnostics);
 
         setContentView(scroll);
