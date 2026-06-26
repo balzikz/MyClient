@@ -28,7 +28,17 @@ add_library(
         mathshim
         SHARED
         math_shim.cpp
+        runtime_handoff.cpp
         bedrock_jni_stage.cpp
+)
+
+# Stage 5.0.0 kept a diagnostic android_main loop in math_shim.cpp.
+# Rename that implementation at compile time so runtime_handoff.cpp becomes
+# the single exported android_main entrypoint for Stage 5.0.1.
+set_source_files_properties(
+        math_shim.cpp
+        PROPERTIES
+        COMPILE_DEFINITIONS "android_main=math_stage500_android_main"
 )
 
 target_compile_features(mathclient PRIVATE cxx_std_20)
@@ -64,6 +74,8 @@ target_link_options(
         PRIVATE
         "-Wl,-u,GameActivity_onCreate"
         "-Wl,-u,Java_com_google_androidgamesdk_GameActivity_initializeNativeCode"
+        "-Wl,-u,android_main"
+        "-Wl,-u,ANativeActivity_onCreate"
 )
 
 find_library(android-native-lib android)
