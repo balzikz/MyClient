@@ -53,6 +53,16 @@ jstring result_string(JNIEnv* environment) {
 
 }  // namespace
 
+extern "C" bool math_bedrock_jni_ready() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_ready;
+}
+
+extern "C" jint math_bedrock_jni_version() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_version;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_balzikz_mathclient_MathShimBridge_nativeInitializeMinecraftJni(
         JNIEnv* environment,
@@ -146,8 +156,7 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_balzikz_mathclient_MathShimBridge_nativeIsMinecraftJniReady(
         JNIEnv*,
         jclass) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return g_ready ? JNI_TRUE : JNI_FALSE;
+    return math_bedrock_jni_ready() ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
