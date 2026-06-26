@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <jni.h>
 
+#include <cstdio>
 #include <mutex>
 #include <string>
 
@@ -39,6 +40,17 @@ std::string snapshot() {
             + " status=" + g_status;
 }
 
+void set_failure(const std::string& message) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_ready = false;
+    g_status = "FAIL: " + message;
+}
+
+jstring result_string(JNIEnv* environment) {
+    const std::string result = snapshot();
+    return environment->NewStringUTF(result.c_str());
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -51,52 +63,43 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeInitializeMinecraftJni(
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (g_ready) {
-            const std::string result = snapshot();
-            return environment->NewStringUTF(result.c_str());
+            return environment->NewStringUTF(
+                    ("attempted=YES ready=YES version=" + version_text(g_version)
+                     + " status=" + g_status).c_str());
         }
         g_attempted = true;
         g_status = "STARTING";
     }
 
     if (path.empty()) {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_status = "FAIL: empty Minecraft path";
-        const std::string result = snapshot();
-        return environment->NewStringUTF(result.c_str());
+        set_failure("empty Minecraft path");
+        return result_string(environment);
     }
 
     JavaVM* virtual_machine = nullptr;
     if (environment->GetJavaVM(&virtual_machine) != JNI_OK || virtual_machine == nullptr) {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_status = "FAIL: GetJavaVM";
-        const std::string result = snapshot();
-        return environment->NewStringUTF(result.c_str());
+        set_failure("GetJavaVM");
+        return result_string(environment);
     }
 
     void* handle = dlopen(path.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle == nullptr) {
         const char* raw_error = dlerror();
-        const std::string error = raw_error == nullptr
-                ? "dlopen failed without dlerror"
-                : raw_error;
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_status = "FAIL: " + error;
-        const std::string result = snapshot();
-        return environment->NewStringUTF(result.c_str());
+        set_failure(raw_error == nullptr
+                    ? "dlopen failed without dlerror"
+                    : raw_error);
+        return result_string(environment);
     }
 
     dlerror();
     void* symbol = dlsym(handle, "JNI_OnLoad");
     const char* raw_symbol_error = dlerror();
     if (symbol == nullptr) {
-        const std::string error = raw_symbol_error == nullptr
-                ? "JNI_OnLoad missing"
-                : raw_symbol_error;
+        set_failure(raw_symbol_error == nullptr
+                    ? "JNI_OnLoad missing"
+                    : raw_symbol_error);
         dlclose(handle);
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_status = "FAIL: " + error;
-        const std::string result = snapshot();
-        return environment->NewStringUTF(result.c_str());
+        return result_string(environment);
     }
 
     __android_log_print(ANDROID_LOG_INFO, kTag,
@@ -106,7 +109,7 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeInitializeMinecraftJni(
     auto function = reinterpret_cast<JniOnLoadFunction>(symbol);
     const jint version = function(virtual_machine, nullptr);
 
-    bool pending_exception = environment->ExceptionCheck() == JNI_TRUE;
+    const bool pending_exception = environment->ExceptionCheck() == JNI_TRUE;
     if (pending_exception) {
         __android_log_print(ANDROID_LOG_ERROR, kTag,
                             "Bedrock JNI_OnLoad returned with a pending Java exception");
@@ -136,8 +139,7 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeInitializeMinecraftJni(
                         "Bedrock JNI_OnLoad result version=%s ready=%s",
                         version_text(version).c_str(), ready ? "YES" : "NO");
 
-    const std::string result = snapshot();
-    return environment->NewStringUTF(result.c_str());
+    return result_string(environment);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -152,6 +154,5 @@ extern "C" JNIEXPORT jstring JNICALL
 Java_com_balzikz_mathclient_MathShimBridge_nativeMinecraftJniStatus(
         JNIEnv* environment,
         jclass) {
-    const std::string result = snapshot();
-    return environment->NewStringUTF(result.c_str());
+    return result_string(environment);
 }
