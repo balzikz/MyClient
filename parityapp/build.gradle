@@ -1,0 +1,73 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.balzikz.mathclient.parity'
+    compileSdk 36
+    ndkVersion '27.0.12077973'
+
+    defaultConfig {
+        applicationId 'com.balzikz.mathclient.parity'
+        minSdk 28
+        targetSdk 36
+        versionCode 33
+        versionName '0.20.0-parity'
+
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags '-std=c++20 -Wall -Wextra -Werror'
+            }
+        }
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'src/parity/AndroidManifest.xml'
+            java.srcDirs = [
+                    'src/parity/java',
+                    '../app/src/main/java/com/mojang/minecraftpe',
+                    '../app/src/main/java/com/microsoft'
+            ]
+            res.srcDirs = ['src/parity/res']
+        }
+    }
+
+    buildTypes {
+        debug { }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('src/parity/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.games:games-activity:4.4.1'
+    implementation 'org.conscrypt:conscrypt-android:2.5.3'
+}
