@@ -62,6 +62,7 @@ target_link_options(
         mathshim
         PRIVATE
         "-Wl,-u,GameActivity_onCreate"
+        "-Wl,-u,Java_com_google_androidgamesdk_GameActivity_initializeNativeCode"
 )
 
 find_library(android-native-lib android)
