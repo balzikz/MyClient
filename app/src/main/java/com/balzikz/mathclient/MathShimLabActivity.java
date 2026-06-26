@@ -36,11 +36,11 @@ public final class MathShimLabActivity extends Activity {
         report.setTextIsSelectable(true);
         root.addView(report);
 
-        Button launch = button("ЗАПУСТИТЬ STAGE 4.2 BEDROCK JNI");
+        Button launch = button("ЗАПУСТИТЬ STAGE 5.0.1 NATIVE HANDOFF");
         launch.setOnClickListener(view -> {
             HostJournal.reset(this);
-            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting Stage 4.2 GameHostActivity");
-            startActivity(new Intent(this, GameHostActivity.class));
+            HostJournal.write(this, "LAUNCH_REQUESTED", "Starting RuntimeHostActivity stage=5.0.1");
+            startActivity(new Intent(this, RuntimeHostActivity.class));
         });
         root.addView(launch);
 
@@ -87,22 +87,21 @@ public final class MathShimLabActivity extends Activity {
         File minecraft = HostJournal.game(this);
         File shim = new File(getApplicationInfo().nativeLibraryDir, "libmathshim.so");
 
-        return "MATH CLIENT STAGE 4.2\n"
-                + "Architecture: GameActivity -> shim -> Bedrock ELF -> JNI_OnLoad\n\n"
+        return "MATH CLIENT STAGE 5.0.1\n"
+                + "Architecture: JVM System.load -> RTLD_NOLOAD -> single native entrypoint owner\n\n"
                 + "Shim packaged: " + describe(shim) + "\n"
                 + "Runtime directory: " + describe(runtime) + "\n"
                 + "Minecraft library: " + describe(minecraft) + "\n"
-                + "JNI state: " + safeJniStatus() + "\n"
-                + "GameActivity forwarding: DISABLED IN 4.2\n\n"
-                + "=== STAGE 4.2 HOST JOURNAL ===\n"
+                + "Connection state: " + safeConnectionStatus() + "\n\n"
+                + "=== STAGE 5.0.1 HOST JOURNAL ===\n"
                 + HostJournal.read(this)
                 + "\n=== SIGNAL TRACE ===\n"
                 + HostJournal.readSignalTrace(this);
     }
 
-    private String safeJniStatus() {
+    private String safeConnectionStatus() {
         try {
-            return MathShimBridge.nativeMinecraftJniStatus();
+            return MathShimBridge.combinedStatus();
         } catch (Throwable error) {
             return "UNAVAILABLE: " + error.getClass().getSimpleName() + ": " + error.getMessage();
         }
@@ -119,7 +118,7 @@ public final class MathShimLabActivity extends Activity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TITLE,
-                "math-stage420-diagnostics-" + System.currentTimeMillis() + ".txt");
+                "math-stage501-diagnostics-" + System.currentTimeMillis() + ".txt");
         startActivityForResult(intent, CREATE_DIAGNOSTICS_FILE);
     }
 
