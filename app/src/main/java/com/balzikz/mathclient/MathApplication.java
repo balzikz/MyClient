@@ -17,7 +17,7 @@ public final class MathApplication extends Application {
         if (!process.endsWith(":game_host")) return;
 
         installCrashJournal();
-        HostJournal.write(this, "APPLICATION_START", process + " stage=4.1.0");
+        HostJournal.write(this, "APPLICATION_START", process + " stage=4.2.0");
         LinkerBridge.setSignalMarker("APPLICATION_START");
         String signalInstall = LinkerBridge.installSignalTrace(
                 HostJournal.signalTrace(this).getAbsolutePath());
@@ -31,7 +31,7 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException("Bedrock runtime is missing");
             }
 
-            LinkerBridge.setSignalMarker("PREPARE_STAGE_4_1_RUNTIME");
+            LinkerBridge.setSignalMarker("PREPARE_STAGE_4_2_RUNTIME");
             String preload = LinkerBridge.prepareMinecraftHost(runtime.getAbsolutePath());
             if (!preload.contains("Verdict: READY FOR SYSTEM LOAD")) {
                 throw new IllegalStateException(preload);
@@ -49,10 +49,22 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException(bindStatus);
             }
 
+            String signalRefresh = LinkerBridge.refreshSignalTrace();
+            HostJournal.write(this, "SIGNAL_TRACE_REFRESH_AFTER_BIND", signalRefresh);
+
+            LinkerBridge.setSignalMarker("BEDROCK_JNI_ONLOAD_START");
+            HostJournal.write(this, "BEDROCK_JNI_ONLOAD_START",
+                    "Calling Minecraft JNI_OnLoad; GameActivity forwarding remains disabled");
+            String jniStatus = MathShimBridge.initializeMinecraftJni(this);
+            HostJournal.write(this, "BEDROCK_JNI_ONLOAD_RESULT", jniStatus);
+            if (!MathShimBridge.nativeIsMinecraftJniReady()) {
+                throw new IllegalStateException(jniStatus);
+            }
+
             hostReady = true;
-            hostStatus = bindStatus;
-            LinkerBridge.setSignalMarker("BEDROCK_BOUND_READY");
-            HostJournal.write(this, "MATH_SHIM_READY", bindStatus);
+            hostStatus = bindStatus + " | " + jniStatus;
+            LinkerBridge.setSignalMarker("BEDROCK_JNI_READY");
+            HostJournal.write(this, "MATH_SHIM_READY", hostStatus);
         } catch (Throwable error) {
             hostReady = false;
             hostStatus = describe(error);
