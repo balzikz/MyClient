@@ -17,7 +17,7 @@ public final class MathApplication extends Application {
         if (!process.endsWith(":game_host")) return;
 
         installCrashJournal();
-        HostJournal.write(this, "APPLICATION_START", process + " stage=4.2.0");
+        HostJournal.write(this, "APPLICATION_START", process + " stage=5.0.0");
         LinkerBridge.setSignalMarker("APPLICATION_START");
         String signalInstall = LinkerBridge.installSignalTrace(
                 HostJournal.signalTrace(this).getAbsolutePath());
@@ -31,43 +31,46 @@ public final class MathApplication extends Application {
                 throw new IllegalStateException("Bedrock runtime is missing");
             }
 
-            LinkerBridge.setSignalMarker("PREPARE_STAGE_4_2_RUNTIME");
+            LinkerBridge.setSignalMarker("PREPARE_STAGE_5_0_RUNTIME");
             String preload = LinkerBridge.prepareMinecraftHost(runtime.getAbsolutePath());
             if (!preload.contains("Verdict: READY FOR SYSTEM LOAD")) {
                 throw new IllegalStateException(preload);
             }
             HostJournal.write(this, "DEPENDENCIES_READY", preload);
 
+            // Loading mathshim first preserves it as android.app.lib_name while
+            // leaving libminecraftpe.so entirely under JVM/System.load ownership.
             LinkerBridge.setSignalMarker("CONFIGURE_MATH_SHIM");
             String shimStatus = MathShimBridge.configure(this);
             HostJournal.write(this, "MATH_SHIM_CONFIGURED", shimStatus);
 
-            LinkerBridge.setSignalMarker("BIND_BEDROCK_ELF");
-            String bindStatus = MathShimBridge.nativeBindMinecraft();
-            HostJournal.write(this, "BEDROCK_BIND_RESULT", bindStatus);
-            if (!MathShimBridge.nativeIsMinecraftBound()) {
-                throw new IllegalStateException(bindStatus);
+            LinkerBridge.setSignalMarker("BEDROCK_SYSTEM_LOAD_START");
+            HostJournal.write(this, "BEDROCK_SYSTEM_LOAD_START",
+                    "loader=System.load"
+                            + " bytes=" + game.length()
+                            + " path=" + game.getAbsolutePath()
+                            + " nativeBindBeforeLoad=NO"
+                            + " manualJniOnLoad=NO");
+
+            String loadStatus = BedrockJvmLoader.load(this);
+            HostJournal.write(this, "BEDROCK_SYSTEM_LOAD_RETURN", loadStatus);
+            if (!BedrockJvmLoader.isLoaded()) {
+                throw new IllegalStateException(loadStatus);
             }
 
+            // The signal tracer must learn the Minecraft mapping only after the
+            // VM has completed System.load and JNI_OnLoad successfully.
             String signalRefresh = LinkerBridge.refreshSignalTrace();
-            HostJournal.write(this, "SIGNAL_TRACE_REFRESH_AFTER_BIND", signalRefresh);
-
-            LinkerBridge.setSignalMarker("BEDROCK_JNI_ONLOAD_START");
-            HostJournal.write(this, "BEDROCK_JNI_ONLOAD_START",
-                    "Calling Minecraft JNI_OnLoad; GameActivity forwarding remains disabled");
-            String jniStatus = MathShimBridge.initializeMinecraftJni(this);
-            HostJournal.write(this, "BEDROCK_JNI_ONLOAD_RESULT", jniStatus);
-            if (!MathShimBridge.nativeIsMinecraftJniReady()) {
-                throw new IllegalStateException(jniStatus);
-            }
+            HostJournal.write(this, "SIGNAL_TRACE_REFRESH_AFTER_SYSTEM_LOAD", signalRefresh);
 
             hostReady = true;
-            hostStatus = bindStatus + " | " + jniStatus;
-            LinkerBridge.setSignalMarker("BEDROCK_JNI_READY");
-            HostJournal.write(this, "MATH_SHIM_READY", hostStatus);
+            hostStatus = "jvmLoad=" + loadStatus + " | shim=" + shimStatus;
+            LinkerBridge.setSignalMarker("BEDROCK_SYSTEM_LOAD_READY");
+            HostJournal.write(this, "HOST_RUNTIME_READY", hostStatus);
         } catch (Throwable error) {
             hostReady = false;
-            hostStatus = describe(error);
+            hostStatus = describe(error)
+                    + " | jvmLoad=" + BedrockJvmLoader.status();
             LinkerBridge.setSignalMarker("APPLICATION_LOAD_FAIL");
             HostJournal.write(this, "APPLICATION_LOAD_FAIL", hostStatus);
         }
