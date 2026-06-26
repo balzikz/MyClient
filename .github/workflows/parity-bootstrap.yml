@@ -1,0 +1,89 @@
+name: Build Flarial Parity Bootstrap
+
+on:
+  push:
+    branches: [ flarial-parity-bootstrap ]
+  pull_request:
+    paths:
+      - 'parityapp/**'
+      - 'app/src/main/java/com/mojang/minecraftpe/**'
+      - 'app/src/main/java/com/microsoft/**'
+      - 'settings.gradle'
+      - '.github/workflows/parity-bootstrap.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-parity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK, NDK and CMake
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.4.1'
+
+      - name: Build clean parity APK
+        shell: bash
+        run: |
+          set +e
+          gradle :parityapp:assembleDebug --stacktrace > parity-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "===== PARITY BUILD FAILURE TAIL ====="
+            tail -n 300 parity-build.log
+            exit "$status"
+          fi
+          echo "Parity Gradle build completed successfully."
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flarial-parity-build-log
+          path: parity-build.log
+          if-no-files-found: error
+
+      - name: Verify bootstrap native ABI and APK
+        shell: bash
+        run: |
+          APK=parityapp/build/outputs/apk/debug/parityapp-debug.apk
+          unzip -l "$APK" | grep "lib/arm64-v8a/libshin.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libflarialclient.so"
+          rm -rf parity-apk-check
+          mkdir parity-apk-check
+          unzip -q "$APK" \
+            "lib/arm64-v8a/libshin.so" \
+            "lib/arm64-v8a/libflarialclient.so" \
+            -d parity-apk-check
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          "$READELF" -Ws parity-apk-check/lib/arm64-v8a/libshin.so | grep "JNI_OnLoad"
+          "$READELF" -Ws parity-apk-check/lib/arm64-v8a/libshin.so | grep "ANativeActivity_onCreate"
+          "$READELF" -Ws parity-apk-check/lib/arm64-v8a/libshin.so | grep "ANativeActivity_finish"
+          "$READELF" -Ws parity-apk-check/lib/arm64-v8a/libshin.so | grep "android_main"
+          "$READELF" -Ws parity-apk-check/lib/arm64-v8a/libflarialclient.so | grep "JNI_OnLoad"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
+
+      - name: Upload parity APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: math-client-flarial-parity-bootstrap
+          path: parityapp/build/outputs/apk/debug/parityapp-debug.apk
+          if-no-files-found: error
