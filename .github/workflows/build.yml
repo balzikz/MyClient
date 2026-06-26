@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, stage-4.0-math-shim ]
   pull_request:
   workflow_dispatch:
 
@@ -38,17 +38,43 @@ jobs:
         run: base64 --decode ci/math-debug.keystore.b64 > ci/math-debug.keystore
 
       - name: Build debug APK with native core
-        run: gradle :app:assembleDebug --stacktrace
-
-      - name: Verify native libraries and signature
+        shell: bash
         run: |
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathclient.so"
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "lib/arm64-v8a/libmathlinker.so"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
+          set +e
+          gradle :app:assembleDebug --stacktrace > stage4-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "===== STAGE 4 BUILD FAILURE TAIL ====="
+            tail -n 250 stage4-build.log
+            exit "$status"
+          fi
+          echo "Stage 4 Gradle build completed successfully."
+
+      - name: Upload Stage 4 build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-build-log
+          path: stage4-build.log
+          if-no-files-found: error
+
+      - name: Verify native libraries, JNI bridge and signature
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          unzip -l "$APK" | grep "lib/arm64-v8a/libmathclient.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libmathlinker.so"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libmathshim.so"
+          rm -rf stage4-apk-check
+          mkdir stage4-apk-check
+          unzip -q "$APK" "lib/arm64-v8a/libmathshim.so" -d stage4-apk-check
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws \
+            stage4-apk-check/lib/arm64-v8a/libmathshim.so \
+            | grep "Java_com_google_androidgamesdk_GameActivity_initializeNativeCode"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: math-client-native-debug
+          name: math-client-stage-4-shim-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

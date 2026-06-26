@@ -8,8 +8,9 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 
 public final class HostJournal {
-    private static final String NAME = "stage-3.9-host-journal.txt";
-    private static final String SIGNAL_NAME = "stage-3.9.8-signal-trace.txt";
+    private static final String STAGE = "4.0.0";
+    private static final String NAME = "stage-4.0-host-journal.txt";
+    private static final String SIGNAL_NAME = "stage-4.0-signal-trace.txt";
     private static final int MAX_READ_BYTES = 96 * 1024;
 
     private HostJournal() {
@@ -23,27 +24,30 @@ public final class HostJournal {
         return new File(runtime(context), "libminecraftpe.so");
     }
 
+    public static File journal(Context context) {
+        return new File(context.getNoBackupFilesDir(), NAME);
+    }
+
     public static File signalTrace(Context context) {
         return new File(context.getNoBackupFilesDir(), SIGNAL_NAME);
     }
 
     public static synchronized void reset(Context context) {
         long started = System.currentTimeMillis();
-        writeFresh(new File(context.getNoBackupFilesDir(), NAME),
-                "MATH GAMEACTIVITY HOST TIMELINE\nstage=3.9.8\nstarted=" + started + "\n");
+        writeFresh(journal(context),
+                "MATH GAMEACTIVITY HOST TIMELINE\nstage=" + STAGE + "\nstarted=" + started + "\n");
         writeFresh(signalTrace(context),
-                "MATH NATIVE SIGNAL TRACE\nstage=3.9.8\nstarted=" + started + "\n");
+                "MATH NATIVE SIGNAL TRACE\nstage=" + STAGE + "\nstarted=" + started + "\n");
     }
 
     public static synchronized void write(Context context, String status, String detail) {
-        File file = new File(context.getNoBackupFilesDir(), NAME);
         String text = "\n---\n"
                 + "status=" + clean(status)
                 + "\ndetail=" + clean(detail)
                 + "\npid=" + android.os.Process.myPid()
                 + "\nthread=" + clean(Thread.currentThread().getName())
                 + "\ntime=" + System.currentTimeMillis() + "\n";
-        try (FileOutputStream output = new FileOutputStream(file, true)) {
+        try (FileOutputStream output = new FileOutputStream(journal(context), true)) {
             output.write(text.getBytes(StandardCharsets.UTF_8));
             output.flush();
             output.getFD().sync();
@@ -52,11 +56,11 @@ public final class HostJournal {
     }
 
     public static synchronized String read(Context context) {
-        return readTail(new File(context.getNoBackupFilesDir(), NAME), "No Stage 3.9 journal yet.");
+        return readTail(journal(context), "No Stage 4 journal yet.");
     }
 
     public static synchronized String readSignalTrace(Context context) {
-        return readTail(signalTrace(context), "No native signal trace yet.");
+        return readTail(signalTrace(context), "No Stage 4 native signal trace yet.");
     }
 
     private static void writeFresh(File file, String text) {
