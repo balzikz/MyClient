@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, stage-4.0-math-shim, stage-4.1-bedrock-bind ]
+    branches: [ main, stage-4.0-math-shim, stage-4.1-bedrock-bind, stage-4.2-bedrock-jni ]
   pull_request:
   workflow_dispatch:
 
@@ -44,11 +44,11 @@ jobs:
           gradle :app:assembleDebug --stacktrace > stage4-build.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
-            echo "===== STAGE 4.1 BUILD FAILURE TAIL ====="
+            echo "===== STAGE 4.2 BUILD FAILURE TAIL ====="
             tail -n 250 stage4-build.log
             exit "$status"
           fi
-          echo "Stage 4.1 Gradle build completed successfully."
+          echo "Stage 4.2 Gradle build completed successfully."
 
       - name: Upload Stage 4 build log on failure
         if: failure()
@@ -58,7 +58,7 @@ jobs:
           path: stage4-build.log
           if-no-files-found: error
 
-      - name: Verify native libraries, JNI bridge and signature
+      - name: Verify native libraries, JNI bridges and signature
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           unzip -l "$APK" | grep "lib/arm64-v8a/libmathclient.so"
@@ -69,12 +69,13 @@ jobs:
           unzip -q "$APK" "lib/arm64-v8a/libmathshim.so" -d stage4-apk-check
           "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep "Java_com_google_androidgamesdk_GameActivity_initializeNativeCode"
           "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep "MathShimBridge_nativeBindMinecraft"
-          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep "MathShimBridge_nativeIsMinecraftBound"
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep "MathShimBridge_nativeInitializeMinecraftJni"
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws stage4-apk-check/lib/arm64-v8a/libmathshim.so | grep "MathShimBridge_nativeIsMinecraftJniReady"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: math-client-stage-4.1-bedrock-bind-debug
+          name: math-client-stage-4.2-bedrock-jni-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
