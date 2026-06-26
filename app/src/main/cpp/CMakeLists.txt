@@ -28,6 +28,7 @@ add_library(
         mathshim
         SHARED
         math_shim.cpp
+        bedrock_jni_stage.cpp
 )
 
 target_compile_features(mathclient PRIVATE cxx_std_20)
