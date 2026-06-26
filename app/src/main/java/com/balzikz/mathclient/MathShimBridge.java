@@ -16,11 +16,11 @@ public final class MathShimBridge {
                 HostJournal.game(context).getAbsolutePath());
     }
 
-    public static String initializeMinecraftJni(Context context) {
-        return nativeInitializeMinecraftJni(HostJournal.game(context).getAbsolutePath());
-    }
-
     public static native String nativeConfigure(String journalPath, String minecraftPath);
+
+    public static native String nativeConnectLoadedRuntime(String loadedPath);
+
+    public static native boolean nativeIsRuntimeConnected();
 
     public static native String nativeBindMinecraft();
 
