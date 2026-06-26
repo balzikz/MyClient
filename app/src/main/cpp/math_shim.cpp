@@ -6,7 +6,9 @@
 #include <atomic>
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <mutex>
 #include <string>
@@ -18,12 +20,20 @@
 namespace {
 
 constexpr const char* kTag = "MATH-SHIM";
-constexpr const char* kStage = "4.0.0";
+constexpr const char* kStage = "4.1.0";
 
 std::mutex g_state_mutex;
 std::string g_journal_path;
 std::string g_minecraft_path;
+std::string g_bind_error;
+void* g_minecraft_handle = nullptr;
+void* g_minecraft_game_activity_on_create = nullptr;
+void* g_minecraft_jni_on_load = nullptr;
+void* g_minecraft_android_main = nullptr;
+void* g_minecraft_native_activity_on_create = nullptr;
 std::atomic<bool> g_configured{false};
+std::atomic<bool> g_bind_attempted{false};
+std::atomic<bool> g_minecraft_bound{false};
 std::atomic<bool> g_android_main_entered{false};
 std::atomic<int32_t> g_last_app_command{-1};
 
@@ -47,6 +57,29 @@ std::string clean(std::string value) {
         value += "...";
     }
     return value;
+}
+
+std::string pointer_hex(const void* value) {
+    char buffer[32]{};
+    std::snprintf(buffer, sizeof(buffer), "0x%llx",
+                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(value)));
+    return buffer;
+}
+
+std::string symbol_description(void* symbol) {
+    if (symbol == nullptr) return "MISSING";
+
+    Dl_info info{};
+    if (dladdr(symbol, &info) == 0 || info.dli_fbase == nullptr) {
+        return "FOUND address=" + pointer_hex(symbol) + " module=UNKNOWN";
+    }
+
+    const auto address = reinterpret_cast<uintptr_t>(symbol);
+    const auto base = reinterpret_cast<uintptr_t>(info.dli_fbase);
+    return "FOUND address=" + pointer_hex(symbol)
+            + " base=" + pointer_hex(info.dli_fbase)
+            + " offset=" + pointer_hex(reinterpret_cast<void*>(address - base))
+            + " module=" + (info.dli_fname == nullptr ? "UNKNOWN" : info.dli_fname);
 }
 
 void write_all(int descriptor, const char* data, size_t size) {
@@ -99,23 +132,135 @@ std::string from_java_string(JNIEnv* environment, jstring value) {
 }
 
 void on_app_command(android_app*, int32_t command) {
-    g_last_app_command.store(command, std::memory_order_relaxed);
+    const int32_t previous = g_last_app_command.exchange(command, std::memory_order_relaxed);
+    if (command == 20 && previous == 20) return;
     append_event("SHIM_APP_COMMAND", "command=" + std::to_string(command));
 }
 
 std::string status_text() {
     std::string minecraft_path;
+    std::string bind_error;
+    void* handle = nullptr;
+    void* game_activity_on_create = nullptr;
+    void* jni_on_load = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_state_mutex);
         minecraft_path = g_minecraft_path;
+        bind_error = g_bind_error;
+        handle = g_minecraft_handle;
+        game_activity_on_create = g_minecraft_game_activity_on_create;
+        jni_on_load = g_minecraft_jni_on_load;
     }
 
     return std::string("stage=") + kStage
             + " configured=" + (g_configured.load() ? "YES" : "NO")
+            + " bind_attempted=" + (g_bind_attempted.load() ? "YES" : "NO")
+            + " bind=" + (g_minecraft_bound.load() ? "READY" : "NOT_READY")
+            + " handle=" + (handle == nullptr ? "MISSING" : "READY")
+            + " GameActivity_onCreate="
+            + (game_activity_on_create == nullptr ? "MISSING" : "FOUND")
+            + " JNI_OnLoad=" + (jni_on_load == nullptr ? "MISSING" : "FOUND_NOT_CALLED")
             + " android_main=" + (g_android_main_entered.load() ? "ENTERED" : "NOT_ENTERED")
             + " last_command=" + std::to_string(g_last_app_command.load())
             + " minecraft_path=" + (minecraft_path.empty() ? "MISSING" : "CONFIGURED")
-            + " bedrock_loaded=NO";
+            + " bedrock_loaded=" + (g_minecraft_bound.load() ? "YES" : "NO")
+            + " bedrock_started=NO"
+            + (bind_error.empty() ? "" : " error=" + clean(bind_error));
+}
+
+std::string bind_minecraft() {
+    if (g_minecraft_bound.load()) return status_text();
+
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(g_state_mutex);
+        path = g_minecraft_path;
+    }
+
+    g_bind_attempted.store(true);
+    append_event("BEDROCK_BIND_START",
+                 "path=" + (path.empty() ? std::string("MISSING") : path)
+                         + " mode=RTLD_NOW|RTLD_GLOBAL forwarding=DISABLED");
+
+    if (path.empty()) {
+        std::lock_guard<std::mutex> lock(g_state_mutex);
+        g_bind_error = "Minecraft path is empty";
+        append_event("BEDROCK_BIND_FAIL", g_bind_error);
+        return status_text();
+    }
+
+    dlerror();
+    void* handle = dlopen(path.c_str(), RTLD_NOW | RTLD_GLOBAL);
+    if (handle == nullptr) {
+        const char* error = dlerror();
+        {
+            std::lock_guard<std::mutex> lock(g_state_mutex);
+            g_bind_error = error == nullptr ? "dlopen failed without dlerror" : error;
+        }
+        append_event("BEDROCK_BIND_FAIL", status_text());
+        return status_text();
+    }
+
+    dlerror();
+    void* game_activity_on_create = dlsym(handle, "GameActivity_onCreate");
+    const char* game_symbol_error = dlerror();
+
+    dlerror();
+    void* jni_on_load = dlsym(handle, "JNI_OnLoad");
+    const char* jni_symbol_error = dlerror();
+
+    dlerror();
+    void* android_main_symbol = dlsym(handle, "android_main");
+    dlerror();
+
+    dlerror();
+    void* native_activity_on_create = dlsym(handle, "ANativeActivity_onCreate");
+    dlerror();
+
+    append_event("BEDROCK_SYMBOL_GAME_ACTIVITY_ON_CREATE",
+                 symbol_description(game_activity_on_create));
+    append_event("BEDROCK_SYMBOL_JNI_ON_LOAD", symbol_description(jni_on_load));
+    append_event("BEDROCK_SYMBOL_ANDROID_MAIN_OPTIONAL",
+                 symbol_description(android_main_symbol));
+    append_event("BEDROCK_SYMBOL_NATIVE_ACTIVITY_ON_CREATE_OPTIONAL",
+                 symbol_description(native_activity_on_create));
+
+    if (game_activity_on_create == nullptr || jni_on_load == nullptr) {
+        std::string error = "required symbols missing";
+        if (game_symbol_error != nullptr) {
+            error += " GameActivity_onCreate=";
+            error += game_symbol_error;
+        }
+        if (jni_symbol_error != nullptr) {
+            error += " JNI_OnLoad=";
+            error += jni_symbol_error;
+        }
+        dlclose(handle);
+        {
+            std::lock_guard<std::mutex> lock(g_state_mutex);
+            g_bind_error = error;
+        }
+        append_event("BEDROCK_BIND_FAIL", error);
+        return status_text();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_state_mutex);
+        g_minecraft_handle = handle;
+        g_minecraft_game_activity_on_create = game_activity_on_create;
+        g_minecraft_jni_on_load = jni_on_load;
+        g_minecraft_android_main = android_main_symbol;
+        g_minecraft_native_activity_on_create = native_activity_on_create;
+        g_bind_error.clear();
+    }
+    g_minecraft_bound.store(true);
+
+    append_event("BEDROCK_BIND_OK",
+                 "handle=" + pointer_hex(handle)
+                         + " required=2/2"
+                         + " JNI_OnLoad=FOUND_NOT_CALLED"
+                         + " forwarding=DISABLED bedrock_started=NO");
+    return status_text();
 }
 
 }  // namespace
@@ -133,6 +278,7 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeConfigure(
         std::lock_guard<std::mutex> lock(g_state_mutex);
         g_journal_path = journal;
         g_minecraft_path = minecraft;
+        g_bind_error.clear();
     }
     g_configured.store(!journal.empty() && !minecraft.empty());
 
@@ -147,6 +293,19 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeConfigure(
 }
 
 extern "C" JNIEXPORT jstring JNICALL
+Java_com_balzikz_mathclient_MathShimBridge_nativeBindMinecraft(
+        JNIEnv* environment,
+        jclass) {
+    const std::string result = bind_minecraft();
+    return environment->NewStringUTF(result.c_str());
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_balzikz_mathclient_MathShimBridge_nativeIsMinecraftBound(JNIEnv*, jclass) {
+    return g_minecraft_bound.load() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
 Java_com_balzikz_mathclient_MathShimBridge_nativeStatus(JNIEnv* environment, jclass) {
     const std::string result = status_text();
     return environment->NewStringUTF(result.c_str());
@@ -155,7 +314,11 @@ Java_com_balzikz_mathclient_MathShimBridge_nativeStatus(JNIEnv* environment, jcl
 extern "C" void android_main(android_app* app) {
     g_android_main_entered.store(true);
     append_event("SHIM_ANDROID_MAIN_ENTER",
-                 app == nullptr ? "app=NULL" : "app=READY bedrock_forwarding=DISABLED");
+                 app == nullptr
+                         ? "app=NULL"
+                         : "app=READY bedrock_bound="
+                                 + std::string(g_minecraft_bound.load() ? "YES" : "NO")
+                                 + " bedrock_forwarding=DISABLED");
 
     if (app == nullptr) {
         append_event("SHIM_ANDROID_MAIN_EXIT", "reason=NULL_APP");
