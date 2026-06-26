@@ -10,6 +10,7 @@ import java.util.Locale;
 public final class BedrockProfile {
     public static final String TARGET_PACKAGE = "com.mojang.minecraftpe";
     public static final String SUPPORTED_VERSION_PREFIX = "1.26.30";
+    public static final String ID = "bedrock-1.26.30-arm64-gles";
     public static final String ABI = "arm64-v8a";
     public static final String GRAPHICS_BACKEND = "OPENGL_ES";
 
