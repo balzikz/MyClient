@@ -60,5 +60,11 @@
                 android:value="shin" />
         </activity>
 
+        <service
+            android:name="com.flarial.client.Launcher.MinecraftPreloadService"
+            android:enabled="true"
+            android:exported="false"
+            android:process=":client" />
+
     </application>
 </manifest>
