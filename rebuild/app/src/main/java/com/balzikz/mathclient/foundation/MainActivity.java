@@ -128,8 +128,8 @@ public final class MainActivity extends Activity {
                 if (isDestroyed()) return;
                 Intent intent = new Intent(Intent.ACTION_SEND).setType("application/zip")
                         .putExtra(Intent.EXTRA_STREAM, uri)
-                        .setClipData(ClipData.newRawUri("MATH diagnostic session", uri))
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.setClipData(ClipData.newRawUri("MATH diagnostic session", uri));
                 try { startActivity(Intent.createChooser(intent, "Отправить диагностическую сессию")); }
                 catch (ActivityNotFoundException error) { toast("Нет приложения для отправки ZIP"); }
             });
