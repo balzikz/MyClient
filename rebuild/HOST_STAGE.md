@@ -72,6 +72,9 @@ game-frame events in this path. These fixtures do not establish phone compatibil
 ## Exact next input
 
 Read the existing Foundation 0.2 contract-*.jsonl plus contract-result-*.txt.
+The new launcher action «Поделиться контрактом TXT» exports the full latest
+contract JSONL as text/plain from the selected saved session, without rescanning
+or a Clipboard truncation. The JSONL already includes the completion record.
 Validate MainActivity ancestry, GameActivity native descriptors, startup call
 references, package signatures and ELF exports for this installed version.
 Only then select the load owner/class loader, implement the matching adapter,

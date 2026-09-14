@@ -43,6 +43,7 @@ public final class MainActivity extends Activity {
         controls.add(Ui.button(this, root, "Подготовить игровой хост", () -> startHost(false)));
         controls.add(Ui.button(this, root, "Прочитать интерфейс Minecraft", () -> readContract(false)));
         contractSummary = Ui.text(this, root, "", 14);
+        controls.add(Ui.button(this, root, "Поделиться контрактом TXT", this::shareContractText));
         controls.add(Ui.button(this, root, "Поделиться сессией ZIP", this::share));
         controls.add(Ui.button(this, root, "Состав APK и библиотек", () -> work("Чтение APK и SHA-256…", log -> RuntimeInventory.collect(this, log))));
         controls.add(Ui.button(this, root, "Проверить графическое окно", this::startProbe));
@@ -154,6 +155,45 @@ public final class MainActivity extends Activity {
                 intent.setClipData(ClipData.newRawUri("MATH diagnostic session", uri));
                 try { startActivity(Intent.createChooser(intent, "Отправить диагностическую сессию")); }
                 catch (ActivityNotFoundException error) { toast("Нет приложения для отправки ZIP"); }
+            });
+        });
+    }
+    private void shareContractText() {
+        work("Подготовка текста контракта…", log -> {
+            File[] candidates = log.directory.listFiles(f -> f.isFile()
+                    && f.getName().matches("contract-[0-9]+-[0-9]+[.]jsonl"));
+            if (candidates == null || candidates.length == 0)
+                throw new IOException("В этой сессии нет контракта. Выбери сохранённую сессию 0.2 или прочитай интерфейс Minecraft.");
+            Arrays.sort(candidates, Comparator.comparing(File::getName).reversed());
+            File source = candidates[0];
+            if (!source.getCanonicalFile().getParentFile().equals(log.directory.getCanonicalFile()))
+                throw new IOException("Contract path is outside the session");
+            File exports = new File(getCacheDir(), "exports");
+            if (!exports.isDirectory() && !exports.mkdirs()) throw new IOException("Cannot create export folder");
+            File text = new File(exports, "MATH-contract-" + log.id + "-" + System.nanoTime() + ".txt");
+            if (!text.createNewFile()) throw new IOException("Contract export already exists");
+            boolean complete = false;
+            try (InputStream in = new BufferedInputStream(new FileInputStream(source));
+                 FileOutputStream out = new FileOutputStream(text)) {
+                // Exact complete JSONL bytes, with a text MIME/name for clients that cannot unpack ZIP.
+                byte[] buffer = new byte[65536]; long total = 0; int n;
+                while ((n = in.read(buffer)) != -1) {
+                    total += n;
+                    if (total > 32L * 1024 * 1024) throw new IOException("Контракт больше 32 MiB; используй ZIP.");
+                    out.write(buffer, 0, n);
+                }
+                out.getFD().sync(); complete = true;
+            } finally {
+                if (!complete && !text.delete()) log.event("CONTRACT_EXPORT_CLEANUP_ERROR", text.getName());
+            }
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", text);
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                Intent intent = new Intent(Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.setClipData(ClipData.newRawUri("MATH contract", uri));
+                try { startActivity(Intent.createChooser(intent, "Отправить контракт Minecraft")); }
+                catch (ActivityNotFoundException error) { toast("Нет приложения для отправки TXT"); }
             });
         });
     }

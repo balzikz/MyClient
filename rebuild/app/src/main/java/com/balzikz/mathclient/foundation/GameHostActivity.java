@@ -26,7 +26,7 @@ public final class GameHostActivity extends Activity implements SurfaceHolder.Ca
         Ui.button(this, root, "Вернуться к журналу", this::finish);
         Ui.text(this, root, "После подготовки появится результат. Подключение самой игры ещё в разработке.", 14);
         try { log = SessionLog.bind(this, getIntent().getStringExtra("session")); }
-        catch (IOException error) { status.setText("Не удалось открыть сессию: " + error.getMessage()); return; }
+        catch (IOException error) { state.fail(); status.setText("Не удалось открыть сессию: " + error.getMessage()); return; }
         log.event("HOST_ACTIVITY_CREATE", "minecraftLoaded=false; adapter=NOT_IMPLEMENTED");
         SurfaceView view = new SurfaceView(this);
         root.addView(view, new LinearLayout.LayoutParams(-1, 0, 1));
