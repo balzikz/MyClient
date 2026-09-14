@@ -16,10 +16,11 @@ import java.util.*;
 public final class MainActivity extends Activity {
     private SessionLog session;
     private FoundationApplication app;
-    private TextView status, report;
+    private TextView status, report, contractSummary;
     private final List<Button> controls = new ArrayList<>();
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean pendingProbe;
+    private boolean pendingContractSelfTest;
     private final Runnable awaitIo = new Runnable() {
         @Override public void run() {
             if (isDestroyed()) return;
@@ -35,15 +36,17 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = Ui.column(this); scroll.addView(root); setContentView(scroll);
         Ui.text(this, root, "MATH / Foundation", 28);
-        Ui.text(this, root, "0.1 · новая диагностическая основа", 16);
-        Ui.text(this, root, "Minecraft ещё не подключён.\nТестовое окно проверяет только наш процесс, JNI и OpenGL ES.", 15);
+        Ui.text(this, root, "0.2 · интерфейс запуска Minecraft", 16);
+        Ui.text(this, root, "Для подключения игры нужно прочитать её Java-методы и native-точки входа. Запуск игры будет добавлен после разбора этих данных.", 15);
         status = Ui.text(this, root, "", 14);
-        controls.add(Ui.button(this, root, "1. Обследовать Minecraft", () -> work("Чтение APK и SHA-256…", log -> RuntimeInventory.collect(this, log))));
-        controls.add(Ui.button(this, root, "2. Проверить JNI и графическое окно", this::startProbe));
-        controls.add(Ui.button(this, root, "3. Собрать причины завершения", () -> work("История завершений…", log -> ExitCollector.collect(this, log))));
+        controls.add(Ui.button(this, root, "Прочитать интерфейс Minecraft", () -> readContract(false)));
+        contractSummary = Ui.text(this, root, "", 14);
+        controls.add(Ui.button(this, root, "Поделиться сессией ZIP", this::share));
+        controls.add(Ui.button(this, root, "Состав APK и библиотек", () -> work("Чтение APK и SHA-256…", log -> RuntimeInventory.collect(this, log))));
+        controls.add(Ui.button(this, root, "Проверить графическое окно", this::startProbe));
+        controls.add(Ui.button(this, root, "Собрать причины завершения", () -> work("История завершений…", log -> ExitCollector.collect(this, log))));
         controls.add(Ui.button(this, root, "Обновить журнал", () -> work("Чтение журнала…", log -> {})));
         controls.add(Ui.button(this, root, "Копировать полный текст", this::copyText));
-        controls.add(Ui.button(this, root, "Поделиться сессией ZIP", this::share));
         controls.add(Ui.button(this, root, "Новая сессия", () -> select(SessionLog.newId())));
         controls.add(Ui.button(this, root, "Сохранённые сессии", this::chooseSession));
         Ui.text(this, root, "Отчёт содержит технические пути, версии и сведения об устройстве. Перед отправкой его можно просмотреть. APK, игровые файлы и токены в ZIP не включаются.", 13);
@@ -55,6 +58,7 @@ public final class MainActivity extends Activity {
         } else select(id == null ? SessionLog.newId() : id);
         // Debug-build-only, explicit CI smoke-test hook. No arbitrary file or library input.
         pendingProbe = BuildConfig.DEBUG && getIntent().getBooleanExtra("debug_probe", false) && state == null;
+        pendingContractSelfTest = BuildConfig.DEBUG && getIntent().getBooleanExtra("debug_contract_self", false) && state == null;
     }
     @Override protected void onSaveInstanceState(Bundle out) {
         if (session != null) out.putString("session", session.id);
@@ -63,6 +67,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (pendingProbe) { pendingProbe = false; startProbe(); }
+        else if (pendingContractSelfTest) { pendingContractSelfTest = false; readContract(true); }
         else if (session != null) main.post(awaitIo);
     }
     @Override protected void onPause() { main.removeCallbacks(awaitIo); super.onPause(); }
@@ -71,7 +76,8 @@ public final class MainActivity extends Activity {
         try {
             session = SessionLog.bind(this, id);
             getPreferences(0).edit().putString("session", id).apply();
-            status.setText("Сессия: " + id + "\nMinecraft: не загружен");
+            status.setText("Сессия: " + id);
+            contractSummary.setText("Интерфейс запуска Minecraft ещё не прочитан.");
             report.setText("");
         } catch (IOException e) { status.setText("Не удалось открыть журнал: " + e.getMessage()); }
     }
@@ -87,16 +93,22 @@ public final class MainActivity extends Activity {
             String contents;
             try { contents = SessionFiles.readText(log.directory, 512 * 1024); }
             catch (IOException e) { contents = "Просмотр ограничен: " + e.getMessage() + "\nПолная сессия доступна в ZIP."; }
-            final String display = contents, error = failure;
+            final String display = contents, error = failure, summary = RuntimeContract.latestSummary(log);
             app.busy.set(false);
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 setBusy(false); report.setText(display);
-                status.setText("Сессия: " + log.id + "\nMinecraft: не загружен"
+                contractSummary.setText(summary);
+                status.setText("Сессия: " + log.id
                         + (error == null ? "" : "\nОшибка: " + error)
                         + (log.writeError() == null ? "" : "\nОшибка сохранения: " + log.writeError()));
             });
         });
+    }
+    private void readContract(boolean selfTest) {
+        work("Чтение интерфейса запуска…", log -> RuntimeContract.collect(this, log, message -> runOnUiThread(() -> {
+            if (!isDestroyed()) status.setText(message + "\nСессия: " + log.id);
+        }), selfTest));
     }
     private void startProbe() {
         if (session == null || app.busy.get()) { toast("Сначала дождись завершения операции"); return; }

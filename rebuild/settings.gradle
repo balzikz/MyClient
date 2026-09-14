@@ -6,4 +6,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = 'MathFoundation'
-include ':core', ':app'
+include ':core', ':contract', ':app'

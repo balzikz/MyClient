@@ -136,9 +136,17 @@ public final class Inventory {
     }
     public static String json(Map<String, Object> fields) {
         StringJoiner out = new StringJoiner(",", "{", "}");
-        fields.forEach((key, value) -> out.add(quote(key) + ":" +
-                (value == null ? "null" : value instanceof Number || value instanceof Boolean
-                        ? value.toString() : quote(value.toString()))));
+        fields.forEach((key, value) -> out.add(quote(key) + ":" + jsonValue(value)));
         return out.toString();
+    }
+    private static String jsonValue(Object value) {
+        if (value == null) return "null";
+        if (value instanceof Number || value instanceof Boolean) return value.toString();
+        if (value instanceof Iterable<?>) {
+            StringJoiner items = new StringJoiner(",", "[", "]");
+            for (Object item : (Iterable<?>) value) items.add(jsonValue(item));
+            return items.toString();
+        }
+        return quote(value.toString());
     }
 }
