@@ -35,14 +35,14 @@ jobs:
         run: |
           unzip -l rebuild/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libmathprobe.so'
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify rebuild/app/build/outputs/apk/debug/app-debug.apk
-          cp rebuild/app/build/outputs/apk/debug/app-debug.apk MATH-Foundation-0.2.0-debug.apk
-          sha256sum MATH-Foundation-0.2.0-debug.apk > MATH-Foundation-0.2.0-debug.apk.sha256
+          cp rebuild/app/build/outputs/apk/debug/app-debug.apk MATH-Foundation-0.3.0-debug.apk
+          sha256sum MATH-Foundation-0.3.0-debug.apk > MATH-Foundation-0.3.0-debug.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: math-foundation-debug
           path: |
-            MATH-Foundation-0.2.0-debug.apk
-            MATH-Foundation-0.2.0-debug.apk.sha256
+            MATH-Foundation-0.3.0-debug.apk
+            MATH-Foundation-0.3.0-debug.apk.sha256
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
@@ -65,7 +65,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Own JNI/EGL and DEX/ELF scanner smoke test
+      - name: Own JNI/EGL, scanner and host environment smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35

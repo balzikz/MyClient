@@ -97,6 +97,7 @@ public final class CoreTests {
             Files.createSymbolicLink(new File(dir, "escape.txt").toPath(), outside);
             rejects(() -> SessionFiles.files(dir), "symlink outside session rejected");
             System.out.println("ALL " + passed + " TESTS PASSED");
+            HostTests.main(args);
         } finally {
             // Only this explicitly-created fixture directory is removed.
             try (java.util.stream.Stream<Path> paths = Files.walk(tmp)) {

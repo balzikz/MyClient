@@ -20,6 +20,12 @@
             android:exported="false"
             android:process=":probe"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity
+            android:name=".GameHostActivity"
+            android:exported="false"
+            android:process=":game_host"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="sensorLandscape" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

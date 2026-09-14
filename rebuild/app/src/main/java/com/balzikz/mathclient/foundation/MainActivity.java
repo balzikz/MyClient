@@ -21,6 +21,7 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean pendingProbe;
     private boolean pendingContractSelfTest;
+    private boolean pendingHostSelfTest;
     private final Runnable awaitIo = new Runnable() {
         @Override public void run() {
             if (isDestroyed()) return;
@@ -36,9 +37,10 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout root = Ui.column(this); scroll.addView(root); setContentView(scroll);
         Ui.text(this, root, "MATH / Foundation", 28);
-        Ui.text(this, root, "0.2 · интерфейс запуска Minecraft", 16);
-        Ui.text(this, root, "Для подключения игры нужно прочитать её Java-методы и native-точки входа. Запуск игры будет добавлен после разбора этих данных.", 15);
+        Ui.text(this, root, "0.3 · подготовка игрового хоста", 16);
+        Ui.text(this, root, "Подготовка проверит файлы Minecraft и откроет окно хоста. Подключение самой игры ещё в разработке.", 15);
         status = Ui.text(this, root, "", 14);
+        controls.add(Ui.button(this, root, "Подготовить игровой хост", () -> startHost(false)));
         controls.add(Ui.button(this, root, "Прочитать интерфейс Minecraft", () -> readContract(false)));
         contractSummary = Ui.text(this, root, "", 14);
         controls.add(Ui.button(this, root, "Поделиться сессией ZIP", this::share));
@@ -59,6 +61,7 @@ public final class MainActivity extends Activity {
         // Debug-build-only, explicit CI smoke-test hook. No arbitrary file or library input.
         pendingProbe = BuildConfig.DEBUG && getIntent().getBooleanExtra("debug_probe", false) && state == null;
         pendingContractSelfTest = BuildConfig.DEBUG && getIntent().getBooleanExtra("debug_contract_self", false) && state == null;
+        pendingHostSelfTest = BuildConfig.DEBUG && getIntent().getBooleanExtra("debug_host_self", false) && state == null;
     }
     @Override protected void onSaveInstanceState(Bundle out) {
         if (session != null) out.putString("session", session.id);
@@ -68,6 +71,7 @@ public final class MainActivity extends Activity {
         super.onResume();
         if (pendingProbe) { pendingProbe = false; startProbe(); }
         else if (pendingContractSelfTest) { pendingContractSelfTest = false; readContract(true); }
+        else if (pendingHostSelfTest) { pendingHostSelfTest = false; startHost(true); }
         else if (session != null) main.post(awaitIo);
     }
     @Override protected void onPause() { main.removeCallbacks(awaitIo); super.onPause(); }
@@ -109,6 +113,12 @@ public final class MainActivity extends Activity {
         work("Чтение интерфейса запуска…", log -> RuntimeContract.collect(this, log, message -> runOnUiThread(() -> {
             if (!isDestroyed()) status.setText(message + "\nСессия: " + log.id);
         }), selfTest));
+    }
+    private void startHost(boolean selfTest) {
+        if (session == null || app.busy.get()) { toast("Сначала дождись завершения операции"); return; }
+        session.event("HOST_REQUESTED", "Prepare installed runtime and surface; selfTest=" + selfTest);
+        startActivity(new Intent(this, GameHostActivity.class).putExtra("session", session.id)
+                .putExtra("debug_host_self", selfTest && BuildConfig.DEBUG));
     }
     private void startProbe() {
         if (session == null || app.busy.get()) { toast("Сначала дождись завершения операции"); return; }
