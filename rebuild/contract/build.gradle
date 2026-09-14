@@ -1,0 +1,21 @@
+plugins { id 'java-library' }
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+dependencies {
+    api project(':core')
+    implementation 'com.android.tools.smali:smali-dexlib2:3.0.9'
+}
+tasks.register('regressionTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.balzikz.mathclient.foundation.contract.ContractTests'
+}
+check.dependsOn regressionTest
+tasks.register('inspectApk', JavaExec) {
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.balzikz.mathclient.foundation.contract.ContractCli'
+    if (project.hasProperty('apk')) args project.property('apk')
+}

@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(mathprobe LANGUAGES CXX)
+add_library(mathprobe SHARED probe.cpp)
+target_link_libraries(mathprobe PRIVATE android log EGL GLESv2)
+target_compile_options(mathprobe PRIVATE -fvisibility=hidden)
